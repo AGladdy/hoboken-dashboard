@@ -142,6 +142,7 @@ export default function Dashboard() {
   const [restaurants, setRestaurants] = useState([]);
   const [restaurantIdx, setRestaurantIdx] = useState(0);
   const [events, setEvents] = useState([]);
+  const [eventPage, setEventPage] = useState(0);
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -438,18 +439,27 @@ export default function Dashboard() {
       <hr style={divider} />
 
       {/* NYC EVENTS */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Events</span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NYC This Week</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Events</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NYC This Week</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 12, color: C.text3 }}>Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</span>
+          <button onClick={() => setEventPage(p => Math.max(0, p - 1))} disabled={eventPage === 0}
+            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>‹</button>
+          <button onClick={() => setEventPage(p => Math.min(Math.ceil(events.length / 10) - 1, p + 1))} disabled={eventPage >= Math.ceil(events.length / 10) - 1}
+            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>›</button>
+        </div>
       </div>
       <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
         {events.length === 0
           ? <div style={{ padding: "16px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
-          : events.map((e, i) => {
+          : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
             const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
             const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < events.length - 1 ? `1px solid ${C.border}` : "none" }}>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? `1px solid ${C.border}` : "none" }}>
                 {e.image && <img src={e.image} alt="" style={{ width: 56, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</div>

@@ -168,7 +168,7 @@ app.get("/api/events", async (req, res) => {
   try {
     const start = new Date().toISOString().split(".")[0] + "Z";
     const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().split(".")[0] + "Z";
-    const url = `https://app.ticketmaster.com/discovery/v2/events.json?city=New+York&countryCode=US&startDateTime=${start}&endDateTime=${end}&size=20&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?city=New+York&countryCode=US&startDateTime=${start}&endDateTime=${end}&size=50&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`Ticketmaster HTTP ${r.status}`);
     const data = await r.json();

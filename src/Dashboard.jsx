@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 // Add your API keys here if you have them
 const CONFIG = {
   // Local proxy server that fetches + decodes GTFS-RT protobuf from path.transitdata.nyc
-  PATH_API: "http://localhost:3002/api/path/hoboken",
-  STOCKS_API: "http://localhost:3002/api/stocks",
+  PATH_API: "https://hoboken-dashboard-production.up.railway.app/api/path/hoboken",
+  STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
   REFRESH_INTERVAL: 300000, // 5 minutes

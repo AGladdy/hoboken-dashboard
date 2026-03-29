@@ -3,9 +3,9 @@ import { useState, useEffect, useCallback } from "react";
 // ========== CONFIG ==========
 // Add your API keys here if you have them
 const CONFIG = {
-  // Local proxy server that fetches + decodes GTFS-RT protobuf from path.transitdata.nyc
   PATH_API: "https://hoboken-dashboard-production.up.railway.app/api/path/hoboken",
   STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
+  RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
   REFRESH_INTERVAL: 300000, // 5 minutes
@@ -138,6 +138,8 @@ export default function Dashboard() {
   const [weather, setWeather] = useState(null);
   const [stocks, setStocks] = useState([]);
   const [stockPage, setStockPage] = useState(0);
+  const [restaurants, setRestaurants] = useState([]);
+  const [restaurantIdx, setRestaurantIdx] = useState(0);
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -192,17 +194,32 @@ export default function Dashboard() {
     } catch (e) { console.error("Stock fetch failed:", e); }
   }, []);
 
+  const fetchRestaurants = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.RESTAURANTS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.length > 0) {
+        setRestaurants(data);
+        // Pick today's suggestion based on day of year
+        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+        setRestaurantIdx(dayOfYear % data.length);
+      }
+    } catch (e) { console.error("Restaurant fetch failed:", e); }
+  }, []);
+
   // Initial fetch + refresh interval
   useEffect(() => {
     fetchWeather();
     fetchStocks();
+    fetchRestaurants();
     const iv = setInterval(() => {
       fetchWeather();
       fetchStocks();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -376,6 +393,36 @@ export default function Dashboard() {
           })
         }
       </div>
+      <hr style={divider} />
+
+      {/* RESTAURANT OF THE DAY */}
+      {restaurants.length > 0 && (() => {
+        const r = restaurants[restaurantIdx];
+        return (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ background: "#2d1a0e", color: C.coral, fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Eat</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Restaurant of the Day</span>
+              </div>
+              <button onClick={() => setRestaurantIdx(i => (i + 1) % restaurants.length)}
+                style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 12 }}>Next →</button>
+            </div>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", display: "flex" }}>
+              {r.photo && <img src={r.photo} alt={r.name} style={{ width: 120, height: 100, objectFit: "cover", flexShrink: 0 }} />}
+              <div style={{ padding: "12px 16px", flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{r.name}</span>
+                  <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 99, background: C.surface, border: `1px solid ${C.border}`, color: C.text3 }}>{r.area}</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.text3, marginBottom: 6 }}>{r.category}{r.price ? " · " + "$".repeat(r.price) : ""}{r.rating ? ` · ★ ${r.rating.toFixed(1)}` : ""}</div>
+                <div style={{ fontSize: 12, color: C.text2 }}>{r.address}</div>
+                {r.website && <a href={r.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.blue, marginTop: 4, display: "inline-block" }}>Website →</a>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <hr style={divider} />
 
       {/* FOOTER */}

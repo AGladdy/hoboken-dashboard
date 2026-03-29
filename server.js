@@ -112,6 +112,51 @@ app.get("/api/stocks", async (req, res) => {
   }
 });
 
+const FOURSQUARE_KEY = "GNSINCP3T4Q3CNZKMT1Z23LPHV14J1XZDBS0TW1C4OU5PSBB";
+const RESTAURANT_LOCATIONS = [
+  { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
+  { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
+  { label: "Brooklyn", ll: "40.6892,-73.9442", radius: 2000 },
+];
+
+let cachedRestaurants = null;
+let lastRestaurantFetch = 0;
+
+app.get("/api/restaurants", async (req, res) => {
+  const now = Date.now();
+  if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
+
+  try {
+    const all = [];
+    for (const loc of RESTAURANT_LOCATIONS) {
+      const url = `https://api.foursquare.com/v3/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,hours_popular,photos,website,tel`;
+      const r = await fetch(url, { headers: { Authorization: FOURSQUARE_KEY, Accept: "application/json" } });
+      if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
+      const data = await r.json();
+      for (const place of data.results || []) {
+        all.push({
+          name: place.name,
+          area: loc.label,
+          rating: place.rating || null,
+          price: place.price || null,
+          category: place.categories?.[0]?.name || "Restaurant",
+          address: place.location?.formatted_address || place.location?.address || "",
+          photo: place.photos?.[0] ? `${place.photos[0].prefix}300x200${place.photos[0].suffix}` : null,
+          website: place.website || null,
+        });
+      }
+    }
+    if (all.length > 0) {
+      cachedRestaurants = all;
+      lastRestaurantFetch = now;
+    }
+    res.json(cachedRestaurants || []);
+  } catch (e) {
+    console.error("Restaurant fetch failed:", e.message);
+    res.json(cachedRestaurants || []);
+  }
+});
+
 app.get("/api/path/all", async (req, res) => {
   const data = await fetchPathData();
   res.json(data);

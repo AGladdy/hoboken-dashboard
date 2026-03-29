@@ -1,0 +1,1 @@
+{"results":[{"name":"Church Square Park","rating":8.3},{"name":"Kung Fu Tea","rating":8.4},{"name":"Ayame Hibachi & Sushi","rating":8.4}],"context":{"geo_bounds":{"circle":{"center":{"latitude":40.744,"longitude":-74.0324},"radius":1500}}}}

@@ -157,6 +157,44 @@ app.get("/api/restaurants", async (req, res) => {
   }
 });
 
+const TICKETMASTER_KEY = "NcJ2DdWED2uEYFyLLA2Ut1xdt4LTQ3GX";
+let cachedEvents = null;
+let lastEventFetch = 0;
+
+app.get("/api/events", async (req, res) => {
+  const now = Date.now();
+  if (cachedEvents && now - lastEventFetch < 3600000) return res.json(cachedEvents);
+
+  try {
+    const start = new Date().toISOString().split(".")[0] + "Z";
+    const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().split(".")[0] + "Z";
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?city=New+York&countryCode=US&startDateTime=${start}&endDateTime=${end}&size=20&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Ticketmaster HTTP ${r.status}`);
+    const data = await r.json();
+    const events = (data._embedded?.events || []).map(e => ({
+      name: e.name,
+      date: e.dates?.start?.localDate,
+      time: e.dates?.start?.localTime || null,
+      venue: e._embedded?.venues?.[0]?.name || null,
+      category: e.classifications?.[0]?.segment?.name || "Event",
+      genre: e.classifications?.[0]?.genre?.name || null,
+      image: e.images?.find(i => i.ratio === "16_9" && i.width > 300)?.url || e.images?.[0]?.url || null,
+      url: e.url || null,
+      priceMin: e.priceRanges?.[0]?.min || null,
+      priceMax: e.priceRanges?.[0]?.max || null,
+    }));
+    if (events.length > 0) {
+      cachedEvents = events;
+      lastEventFetch = now;
+    }
+    res.json(cachedEvents || []);
+  } catch (e) {
+    console.error("Events fetch failed:", e.message);
+    res.json(cachedEvents || []);
+  }
+});
+
 app.get("/api/path/all", async (req, res) => {
   const data = await fetchPathData();
   res.json(data);

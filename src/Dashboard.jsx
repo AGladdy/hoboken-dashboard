@@ -6,6 +6,7 @@ const CONFIG = {
   PATH_API: "https://hoboken-dashboard-production.up.railway.app/api/path/hoboken",
   STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
   RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
+  EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
   REFRESH_INTERVAL: 300000, // 5 minutes
@@ -140,6 +141,7 @@ export default function Dashboard() {
   const [stockPage, setStockPage] = useState(0);
   const [restaurants, setRestaurants] = useState([]);
   const [restaurantIdx, setRestaurantIdx] = useState(0);
+  const [events, setEvents] = useState([]);
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -208,18 +210,28 @@ export default function Dashboard() {
     } catch (e) { console.error("Restaurant fetch failed:", e); }
   }, []);
 
+  const fetchEvents = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.EVENTS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.length > 0) setEvents(data);
+    } catch (e) { console.error("Events fetch failed:", e); }
+  }, []);
+
   // Initial fetch + refresh interval
   useEffect(() => {
     fetchWeather();
     fetchStocks();
     fetchRestaurants();
+    fetchEvents();
     const iv = setInterval(() => {
       fetchWeather();
       fetchStocks();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -423,6 +435,37 @@ export default function Dashboard() {
           </div>
         );
       })()}
+      <hr style={divider} />
+
+      {/* NYC EVENTS */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Events</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NYC This Week</span>
+      </div>
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
+        {events.length === 0
+          ? <div style={{ padding: "16px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
+          : events.map((e, i) => {
+            const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
+            const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < events.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                {e.image && <img src={e.image} alt="" style={{ width: 56, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</div>
+                  <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, color: C.text2 }}>{dateStr}</div>
+                  <div style={{ fontSize: 11, color: C.text3 }}>{timeStr}</div>
+                  {e.priceMin && <div style={{ fontSize: 11, color: C.green }}>from ${Math.round(e.priceMin)}</div>}
+                </div>
+                {e.url && <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue, flexShrink: 0 }}>→</a>}
+              </div>
+            );
+          })
+        }
+      </div>
       <hr style={divider} />
 
       {/* FOOTER */}

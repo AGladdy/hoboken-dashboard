@@ -112,7 +112,7 @@ app.get("/api/stocks", async (req, res) => {
   }
 });
 
-const FOURSQUARE_KEY = "GNSINCP3T4Q3CNZKMT1Z23LPHV14J1XZDBS0TW1C4OU5PSBB";
+const FOURSQUARE_KEY = "SLLKKIZXZ1W4NSAB2RJII2JKEH0YYLWZCJKJ10WKYQGISY4I";
 const RESTAURANT_LOCATIONS = [
   { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
   { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
@@ -129,8 +129,8 @@ app.get("/api/restaurants", async (req, res) => {
   try {
     const all = [];
     for (const loc of RESTAURANT_LOCATIONS) {
-      const url = `https://api.foursquare.com/v3/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,hours_popular,photos,website,tel`;
-      const r = await fetch(url, { headers: { Authorization: FOURSQUARE_KEY, Accept: "application/json" } });
+      const url = `https://places-api.foursquare.com/v3/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,photos,website,tel`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
       if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
       const data = await r.json();
       for (const place of data.results || []) {

@@ -129,7 +129,7 @@ app.get("/api/restaurants", async (req, res) => {
   try {
     const all = [];
     for (const loc of RESTAURANT_LOCATIONS) {
-      const url = `https://places-api.foursquare.com/v3/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,photos,website,tel`;
+      const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,photos,website,tel`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
       if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
       const data = await r.json();

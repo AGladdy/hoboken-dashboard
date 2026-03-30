@@ -16,7 +16,6 @@ const CONFIG = {
   BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   WEATHER_NARRATIVE_API: "https://hoboken-dashboard-production.up.railway.app/api/weather-narrative",
   STOCK_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/stock-digest",
-  COMMUTE_API: "https://hoboken-dashboard-production.up.railway.app/api/commute-advice",
   SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
   EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
   NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
@@ -215,7 +214,6 @@ export default function Dashboard() {
   const [sports, setSports] = useState({});
   const [sportsLeague, setSportsLeague] = useState("nba");
   const [refreshCount, setRefreshCount] = useState(0);
-  const [commuteAdvice, setCommuteAdvice] = useState(null);
   const [sportsRecap, setSportsRecap] = useState(null);
   const [eventPicks, setEventPicks] = useState(null);
   const [newsDigest, setNewsDigest] = useState(null);
@@ -362,15 +360,6 @@ export default function Dashboard() {
     } catch (e) { console.error("Sports fetch failed:", e); }
   }, []);
 
-  const fetchCommuteAdvice = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.COMMUTE_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setCommuteAdvice(data.text);
-    } catch (e) { console.error("Commute advice fetch failed:", e); }
-  }, []);
-
   const fetchSportsRecap = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.SPORTS_RECAP_API);
@@ -402,15 +391,15 @@ export default function Dashboard() {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
-    fetchCommuteAdvice(); fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
+    fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
-      fetchCommuteAdvice(); fetchSportsRecap();
+      fetchSportsRecap();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchCommuteAdvice, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -566,9 +555,6 @@ export default function Dashboard() {
 
           <Divider mb="md" />
 
-          {commuteAdvice && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{commuteAdvice}</Text>
-          )}
 
           {/* PATH */}
           <SectionHeader

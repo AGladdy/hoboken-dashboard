@@ -299,7 +299,17 @@ export default function Dashboard() {
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: 20, boxSizing: "border-box" }}>
-      <style>{`@media (max-width: 600px) { .weather-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }`}</style>
+      <style>{`
+        @media (max-width: 600px) {
+          .weather-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+          .stock-row { grid-template-columns: 28px 1fr 70px 62px !important; }
+          .stock-row .stock-spacer { display: none !important; }
+          .stock-row .stock-sparkline { display: none !important; }
+          .stock-header { grid-template-columns: 28px 1fr 70px 62px !important; }
+          .stock-header .stock-spacer { display: none !important; }
+          .stock-header .stock-sparkline { display: none !important; }
+        }
+      `}</style>
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Adam's dashboard</span>
@@ -473,23 +483,23 @@ export default function Dashboard() {
         </div>
       </div>
       <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "6px 14px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text3, fontWeight: 500 }}>
-          <span>#</span><span>Symbol</span><span></span><span style={{ textAlign: "right" }}>Price</span><span style={{ textAlign: "right" }}>Change</span><span style={{ textAlign: "right" }}>5d</span>
+        <div className="stock-header" style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "6px 14px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text3, fontWeight: 500 }}>
+          <span>#</span><span>Symbol</span><span className="stock-spacer"></span><span style={{ textAlign: "right" }}>Price</span><span style={{ textAlign: "right" }}>Change</span><span className="stock-sparkline" style={{ textAlign: "right" }}>5d</span>
         </div>
         {stocks.length === 0
           ? <div style={{ padding: "20px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
           : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
             const pos = s.pct >= 0;
             return (
-              <div key={s.symbol} style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "7px 14px", borderBottom: `1px solid ${C.border}`, alignItems: "center" }}>
+              <div key={s.symbol} className="stock-row" style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "7px 14px", borderBottom: `1px solid ${C.border}`, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: C.text3 }}>{s.rank}</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.symbol}</span>
-                <span></span>
+                <span className="stock-spacer"></span>
                 <span style={{ fontSize: 13, fontWeight: 500, color: C.text, textAlign: "right" }}>${s.price.toFixed(2)}</span>
                 <span style={{ fontSize: 12, color: pos ? C.green : C.red, textAlign: "right" }}>
                   {pos ? "+" : ""}{s.pct.toFixed(2)}%
                 </span>
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="stock-sparkline" style={{ display: "flex", justifyContent: "flex-end" }}>
                   <Sparkline data={s.sparkline} positive={pos} />
                 </div>
               </div>

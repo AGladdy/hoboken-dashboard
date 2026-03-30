@@ -7,6 +7,7 @@ const CONFIG = {
   STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
   RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
   EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
+  NEWS_API: "https://hoboken-dashboard-production.up.railway.app/api/news",
   BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
@@ -132,16 +133,24 @@ function Sparkline({ data, positive }) {
   );
 }
 
-// ========== COLORS (dark theme) ==========
-const C = {
+// ========== COLORS ==========
+const DARK = {
   bg: "#0a0a0a", surface: "#161616", border: "#262626", borderLight: "#333",
   text: "#e5e5e5", text2: "#999", text3: "#666",
   red: "#ef4444", green: "#22c55e", blue: "#3b82f6", amber: "#f59e0b",
   purple: "#8b5cf6", teal: "#14b8a6", coral: "#f97316",
 };
+const LIGHT = {
+  bg: "#f5f5f5", surface: "#ffffff", border: "#e0e0e0", borderLight: "#cccccc",
+  text: "#111111", text2: "#555555", text3: "#999999",
+  red: "#dc2626", green: "#16a34a", blue: "#2563eb", amber: "#d97706",
+  purple: "#7c3aed", teal: "#0f766e", coral: "#ea580c",
+};
 
 // ========== MAIN COMPONENT ==========
 export default function Dashboard() {
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") !== "light");
+  const C = darkMode ? DARK : LIGHT;
   const [now, setNow] = useState(new Date());
   const [pathTrains, setPathTrains] = useState({ toNY: [], toNJ: [], fetchedAt: null });
   const [pathLive, setPathLive] = useState(false);
@@ -154,6 +163,7 @@ export default function Dashboard() {
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
   const [briefing, setBriefing] = useState(null);
+  const [news, setNews] = useState([]);
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -222,6 +232,15 @@ export default function Dashboard() {
     } catch (e) { console.error("Restaurant fetch failed:", e); }
   }, []);
 
+  const fetchNews = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.NEWS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.length > 0) setNews(data);
+    } catch (e) { console.error("News fetch failed:", e); }
+  }, []);
+
   const fetchBriefing = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.BRIEFING_API);
@@ -247,13 +266,14 @@ export default function Dashboard() {
     fetchRestaurants();
     fetchEvents();
     fetchBriefing();
+    fetchNews();
     const iv = setInterval(() => {
       fetchWeather();
       fetchStocks();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -269,13 +289,19 @@ export default function Dashboard() {
   const card = { background: C.surface, borderRadius: 8, padding: 12 };
 
   return (
-    <div>
+    <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: 20, boxSizing: "border-box" }}>
       {/* HEADER */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Hoboken dashboard</span>
-        <span style={{ fontSize: 14, color: C.text2, fontFamily: "monospace" }}>
-          {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 14, color: C.text2, fontFamily: "monospace" }}>
+            {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+          </span>
+          <button onClick={() => { const next = !darkMode; setDarkMode(next); localStorage.setItem("theme", next ? "dark" : "light"); }}
+            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 13 }}>
+            {darkMode ? "☀️ Light" : "🌙 Dark"}
+          </button>
+        </div>
       </div>
 
       {/* DAILY BRIEFING */}
@@ -530,6 +556,31 @@ export default function Dashboard() {
               </div>
             );
           })
+        }
+      </div>
+      <hr style={divider} />
+
+      {/* NEWS */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ background: "#0a1628", color: "#60a5fa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>News</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Top Headlines</span>
+      </div>
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
+        {news.length === 0
+          ? <div style={{ padding: "16px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
+          : news.slice(0, 15).map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "9px 14px", borderBottom: i < 14 ? `1px solid ${C.border}` : "none" }}>
+              <span style={{ fontSize: 10, color: C.text3, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "1px 6px", flexShrink: 0 }}>{item.source}</span>
+              <a href={item.link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: C.text, textDecoration: "none", lineHeight: 1.4, flex: 1 }}
+                onMouseEnter={e => e.target.style.color = C.blue}
+                onMouseLeave={e => e.target.style.color = C.text}>
+                {item.title}
+              </a>
+              {item.pubDate && <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>
+                {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </span>}
+            </div>
+          ))
         }
       </div>
       <hr style={divider} />

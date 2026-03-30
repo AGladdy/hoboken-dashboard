@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import Anthropic from "@anthropic-ai/sdk";
 
 const app = express();
 app.use(cors());
@@ -112,7 +113,7 @@ app.get("/api/stocks", async (req, res) => {
   }
 });
 
-const FOURSQUARE_KEY = "SLLKKIZXZ1W4NSAB2RJII2JKEH0YYLWZCJKJ10WKYQGISY4I";
+const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;
 const RESTAURANT_LOCATIONS = [
   { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
   { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
@@ -157,7 +158,7 @@ app.get("/api/restaurants", async (req, res) => {
   }
 });
 
-const TICKETMASTER_KEY = "NcJ2DdWED2uEYFyLLA2Ut1xdt4LTQ3GX";
+const TICKETMASTER_KEY = process.env.TICKETMASTER_KEY;
 let cachedEvents = null;
 let lastEventFetch = 0;
 
@@ -192,6 +193,62 @@ app.get("/api/events", async (req, res) => {
   } catch (e) {
     console.error("Events fetch failed:", e.message);
     res.json(cachedEvents || []);
+  }
+});
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let cachedBriefing = null;
+let lastBriefingDate = null;
+
+app.get("/api/briefing", async (req, res) => {
+  const today = new Date().toDateString();
+  if (cachedBriefing && lastBriefingDate === today) return res.json(cachedBriefing);
+
+  try {
+    // Gather context from existing data
+    const [pathRes, weatherRes, stocksRes, eventsRes] = await Promise.all([
+      fetch(`http://localhost:${process.env.PORT || 3002}/api/path/hoboken`).then(r => r.json()).catch(() => ({})),
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=2").then(r => r.json()).catch(() => ({})),
+      fetch(`http://localhost:${process.env.PORT || 3002}/api/stocks`).then(r => r.json()).catch(() => []),
+      fetch(`http://localhost:${process.env.PORT || 3002}/api/events`).then(r => r.json()).catch(() => []),
+    ]);
+
+    const temp = weatherRes?.current?.temperature_2m;
+    const wind = weatherRes?.current?.windspeed_10m;
+    const rainChance = weatherRes?.daily?.precipitation_probability_max?.[0];
+    const hiTemp = weatherRes?.daily?.temperature_2m_max?.[0];
+    const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
+    const topStocks = (stocksRes || []).slice(0, 5).map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct?.toFixed(1)}%`).join(", ");
+    const todayEvents = (eventsRes || []).filter(e => e.date === new Date().toISOString().split("T")[0]).slice(0, 3).map(e => e.name).join(", ");
+    const nextTrains = (pathRes?.toNY || []).slice(0, 2).map(t => `${t.headsign} in ${Math.round(t.secondsAway / 60)}min`).join(", ");
+
+    const prompt = `You are a friendly morning assistant for someone living in Hoboken, NJ who commutes to NYC.
+
+Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}.
+
+Current conditions:
+- Weather: ${temp}°F, high ${hiTemp}°F / low ${loTemp}°F, wind ${wind} mph, ${rainChance}% chance of rain
+- Next PATH trains to NYC: ${nextTrains || "no data"}
+- Market snapshot: ${topStocks || "no data"}
+- Events in NYC today: ${todayEvents || "none found"}
+
+Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whether to bring an umbrella, commute, and anything notable happening. Be conversational and concise, like a smart friend giving you the morning rundown. End with one short motivational or witty line.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedBriefing = {
+      text: message.content[0].text,
+      generatedAt: new Date().toISOString(),
+    };
+    lastBriefingDate = today;
+    res.json(cachedBriefing);
+  } catch (e) {
+    console.error("Briefing failed:", e.message);
+    res.json(cachedBriefing || { text: "Good morning! Have a great day.", generatedAt: new Date().toISOString() });
   }
 });
 

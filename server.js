@@ -252,7 +252,7 @@ Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whethe
     res.json(cachedBriefing);
   } catch (e) {
     console.error("Briefing failed:", e.message);
-    res.json(cachedBriefing || { text: "Good morning! Have a great day.", generatedAt: new Date().toISOString() });
+    res.json({ text: "Good morning! Have a great day.", generatedAt: new Date().toISOString(), error: e.message });
   }
 });
 

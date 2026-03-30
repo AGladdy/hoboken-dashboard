@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
+import { XMLParser } from "fast-xml-parser";
 
 const app = express();
 app.use(cors());
@@ -225,6 +226,7 @@ app.get("/api/briefing", async (req, res) => {
     const topStocks = (stocksRes || []).slice(0, 5).map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct?.toFixed(1)}%`).join(", ");
     const todayEvents = (eventsRes || []).filter(e => e.date === new Date().toISOString().split("T")[0]).slice(0, 3).map(e => e.name).join(", ");
     const nextTrains = (pathRes?.toNY || []).slice(0, 2).map(t => `${t.headsign} in ${Math.round(t.secondsAway / 60)}min`).join(", ");
+    const topHeadlines = (cachedNews || []).slice(0, 5).map(n => n.title).join("; ");
 
     const prompt = `You are a friendly morning assistant for someone living in Hoboken, NJ who commutes to NYC.
 
@@ -235,8 +237,9 @@ Current conditions:
 - Next PATH trains to NYC: ${nextTrains || "no data"}
 - Market snapshot: ${topStocks || "no data"}
 - Events in NYC today: ${todayEvents || "none found"}
+- Top news headlines: ${topHeadlines || "none available"}
 
-Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whether to bring an umbrella, commute, and anything notable happening. Be conversational and concise, like a smart friend giving you the morning rundown. End with one short motivational or witty line.`;
+Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whether to bring an umbrella, commute, and anything notable happening. Be conversational and concise, like a smart friend giving you the morning rundown. End with one short motivational or witty line. Do not use markdown, headers, or bullet points — plain text only.`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -245,7 +248,7 @@ Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whethe
     });
 
     cachedBriefing = {
-      text: message.content[0].text,
+      text: message.content[0].text.replace(/^#+\s*/gm, "").trim(),
       generatedAt: new Date().toISOString(),
     };
     lastBriefingDate = today;
@@ -259,6 +262,50 @@ Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whethe
 app.get("/api/path/all", async (req, res) => {
   const data = await fetchPathData();
   res.json(data);
+});
+
+const RSS_FEEDS = [
+  { name: "Reuters", url: "https://feeds.reuters.com/reuters/topNews" },
+  { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
+  { name: "NY Times", url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml" },
+];
+
+let cachedNews = null;
+let lastNewsFetch = 0;
+
+app.get("/api/news", async (req, res) => {
+  const now = Date.now();
+  if (cachedNews && now - lastNewsFetch < 1800000) return res.json(cachedNews);
+
+  const parser = new XMLParser({ ignoreAttributes: false });
+  const allItems = [];
+
+  for (const feed of RSS_FEEDS) {
+    try {
+      const r = await fetch(feed.url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      const xml = await r.text();
+      const parsed = parser.parse(xml);
+      const items = parsed?.rss?.channel?.item || [];
+      for (const item of (Array.isArray(items) ? items : [items]).slice(0, 8)) {
+        allItems.push({
+          title: item.title?.toString().replace(/<[^>]*>/g, "").trim() || "",
+          link: item.link || item.guid || "",
+          source: feed.name,
+          pubDate: item.pubDate || null,
+        });
+      }
+    } catch (e) {
+      console.error(`RSS fetch failed for ${feed.name}:`, e.message);
+    }
+  }
+
+  allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+  if (allItems.length > 0) {
+    cachedNews = allItems;
+    lastNewsFetch = now;
+  }
+  res.json(cachedNews || []);
 });
 
 app.get("/api/health", (req, res) => {

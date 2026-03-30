@@ -462,6 +462,193 @@ app.get("/api/sports", async (req, res) => {
   res.json(cachedSports || {});
 });
 
+let cachedCommuteAdvice = null;
+let lastCommuteAdviceFetch = 0;
+
+app.get("/api/commute-advice", async (req, res) => {
+  const now = Date.now();
+  if (cachedCommuteAdvice && now - lastCommuteAdviceFetch < 300000) return res.json(cachedCommuteAdvice);
+
+  try {
+    const [pathData, weatherRes] = await Promise.all([
+      fetchPathData().catch(() => ({ results: [] })),
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,precipitation&hourly=precipitation_probability&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=1").then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
+    const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
+    const next3Path = toNYMsgs.slice(0, 3).map(m => ({
+      headsign: m.headSign,
+      minsAway: Math.max(0, Math.round(parseInt(m.secondsToArrival, 10) / 60)),
+      arrivalTimeMessage: m.arrivalTimeMessage,
+    }));
+
+    const currentHour = new Date().getHours();
+    const nextFewHoursPrecip = (weatherRes?.hourly?.precipitation_probability || []).slice(currentHour, currentHour + 3);
+    const rainSoon = nextFewHoursPrecip.some(p => p > 40);
+    const currentTemp = weatherRes?.current?.temperature_2m;
+
+    const pathSummary = next3Path.length > 0
+      ? next3Path.map(t => `${t.headsign} in ${t.minsAway} min`).join(", ")
+      : "no PATH data";
+
+    const prompt = `You are a commute assistant for Adam in Hoboken, NJ. Give a single-sentence commute recommendation.
+
+Next PATH trains to NYC: ${pathSummary}
+Current temp: ${currentTemp != null ? currentTemp + "°F" : "unknown"}
+Rain expected soon: ${rainSoon ? "yes" : "no"}
+
+Write one concise sentence recommending the best way to commute right now. Example: "Take the 8:12 PATH to 33rd — ferry isn't for another 18 minutes and rain is expected by 9am." Plain text only.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 60,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedCommuteAdvice = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastCommuteAdviceFetch = now;
+    res.json(cachedCommuteAdvice);
+  } catch (e) {
+    console.error("Commute advice failed:", e.message);
+    res.json(cachedCommuteAdvice || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+let cachedSportsRecap = null;
+let lastSportsRecapFetch = 0;
+
+app.get("/api/sports-recap", async (req, res) => {
+  const now = Date.now();
+  if (cachedSportsRecap && now - lastSportsRecapFetch < 3600000) return res.json(cachedSportsRecap);
+
+  try {
+    const [nbaRes, nflRes, mlbRes] = await Promise.all([
+      fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard", { headers: { "User-Agent": "Mozilla/5.0" } }).then(r => r.json()).catch(() => ({})),
+      fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard", { headers: { "User-Agent": "Mozilla/5.0" } }).then(r => r.json()).catch(() => ({})),
+      fetch("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard", { headers: { "User-Agent": "Mozilla/5.0" } }).then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const extractGames = (data, leagueLabel) => {
+      return (data.events || [])
+        .filter(e => e.status?.type?.completed === true)
+        .map(e => {
+          const comps = e.competitions?.[0]?.competitors || [];
+          const home = comps.find(c => c.homeAway === "home");
+          const away = comps.find(c => c.homeAway === "away");
+          return `${leagueLabel}: ${away?.team?.shortDisplayName || "?"} ${away?.score || "?"} @ ${home?.team?.shortDisplayName || "?"} ${home?.score || "?"}`;
+        });
+    };
+
+    const allGames = [
+      ...extractGames(nbaRes, "NBA"),
+      ...extractGames(nflRes, "NFL"),
+      ...extractGames(mlbRes, "MLB"),
+    ];
+
+    if (allGames.length === 0) return res.json({ text: "" });
+
+    const prompt = `You are a sports analyst. Write 1-2 sentences summarizing notable results from recent games.
+
+Completed games:
+${allGames.join("\n")}
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedSportsRecap = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastSportsRecapFetch = now;
+    res.json(cachedSportsRecap);
+  } catch (e) {
+    console.error("Sports recap failed:", e.message);
+    res.json(cachedSportsRecap || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+let cachedEventPicks = null;
+let lastEventPicksFetch = 0;
+
+app.get("/api/event-picks", async (req, res) => {
+  const now = Date.now();
+  if (cachedEventPicks && now - lastEventPicksFetch < 10800000) return res.json(cachedEventPicks);
+
+  if (!cachedEvents || cachedEvents.length === 0) return res.json({ text: "" });
+
+  try {
+    const today = new Date();
+    const weekOut = new Date(now + 7 * 24 * 60 * 60 * 1000);
+    const upcoming = cachedEvents
+      .filter(e => {
+        if (!e.date) return false;
+        const d = new Date(e.date + "T12:00:00");
+        return d >= today && d <= weekOut;
+      })
+      .slice(0, 15)
+      .map(e => `${e.name} | ${e.date} | ${e.venue || "TBD"} | ${e.genre || e.category || ""}`);
+
+    const prompt = `You are an event curator. Based on the following upcoming NYC events and my preferences, recommend 1-2 events in a short natural sentence.
+
+My preferences: I like live music, food events, comedy, and unique NYC experiences. I'm less interested in sports events.
+
+Upcoming events (name | date | venue | genre):
+${upcoming.join("\n")}
+
+Write 1-2 sentences recommending specific events with name, date, and venue. Be enthusiastic but concise. Plain text only.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 100,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedEventPicks = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastEventPicksFetch = now;
+    res.json(cachedEventPicks);
+  } catch (e) {
+    console.error("Event picks failed:", e.message);
+    res.json(cachedEventPicks || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+let cachedNewsDigest = null;
+let lastNewsDigestFetch = 0;
+
+app.get("/api/news-digest", async (req, res) => {
+  const now = Date.now();
+  if (cachedNewsDigest && now - lastNewsDigestFetch < 1800000) return res.json(cachedNewsDigest);
+
+  if (!cachedNews || cachedNews.length === 0) return res.json({ text: "" });
+
+  try {
+    const headlines = cachedNews.slice(0, 10).map(n => `[${n.source}] ${n.title}`).join("\n");
+
+    const prompt = `You are a news analyst. Write 2 sentences summarizing what's happening today based on these top headlines.
+
+Headlines:
+${headlines}
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedNewsDigest = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastNewsDigestFetch = now;
+    res.json(cachedNewsDigest);
+  } catch (e) {
+    console.error("News digest failed:", e.message);
+    res.json(cachedNewsDigest || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", source: "panynj.gov", time: new Date().toISOString() });
 });

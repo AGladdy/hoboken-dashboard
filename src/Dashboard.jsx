@@ -16,6 +16,10 @@ const CONFIG = {
   BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   WEATHER_NARRATIVE_API: "https://hoboken-dashboard-production.up.railway.app/api/weather-narrative",
   STOCK_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/stock-digest",
+  COMMUTE_API: "https://hoboken-dashboard-production.up.railway.app/api/commute-advice",
+  SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
+  EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
+  NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
 };
@@ -211,6 +215,10 @@ export default function Dashboard() {
   const [sports, setSports] = useState({});
   const [sportsLeague, setSportsLeague] = useState("nba");
   const [refreshCount, setRefreshCount] = useState(0);
+  const [commuteAdvice, setCommuteAdvice] = useState(null);
+  const [sportsRecap, setSportsRecap] = useState(null);
+  const [eventPicks, setEventPicks] = useState(null);
+  const [newsDigest, setNewsDigest] = useState(null);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
@@ -354,17 +362,55 @@ export default function Dashboard() {
     } catch (e) { console.error("Sports fetch failed:", e); }
   }, []);
 
+  const fetchCommuteAdvice = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.COMMUTE_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setCommuteAdvice(data.text);
+    } catch (e) { console.error("Commute advice fetch failed:", e); }
+  }, []);
+
+  const fetchSportsRecap = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.SPORTS_RECAP_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setSportsRecap(data.text);
+    } catch (e) { console.error("Sports recap fetch failed:", e); }
+  }, []);
+
+  const fetchEventPicks = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.EVENT_PICKS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setEventPicks(data.text);
+    } catch (e) { console.error("Event picks fetch failed:", e); }
+  }, []);
+
+  const fetchNewsDigest = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.NEWS_DIGEST_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setNewsDigest(data.text);
+    } catch (e) { console.error("News digest fetch failed:", e); }
+  }, []);
+
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
+    fetchCommuteAdvice(); fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
+      fetchCommuteAdvice(); fetchSportsRecap();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchCommuteAdvice, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -519,6 +565,10 @@ export default function Dashboard() {
           )}
 
           <Divider mb="md" />
+
+          {commuteAdvice && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{commuteAdvice}</Text>
+          )}
 
           {/* PATH */}
           <SectionHeader
@@ -762,6 +812,9 @@ export default function Dashboard() {
               </Group>
             }
           />
+          {eventPicks && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>
+          )}
           <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
             {events.length === 0
               ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
@@ -806,6 +859,9 @@ export default function Dashboard() {
               />
             }
           />
+          {sportsRecap && (
+            <Text size="xs" c="dimmed" mt="xs" fs="italic">{sportsRecap}</Text>
+          )}
           {!sportsGroups
             ? <Text size="sm" c="dimmed" mb="md">Loading...</Text>
             : (
@@ -872,6 +928,9 @@ export default function Dashboard() {
 
           {/* NEWS */}
           <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" />
+          {newsDigest && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
+          )}
           <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
             {news.length === 0
               ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>

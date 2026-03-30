@@ -8,6 +8,7 @@ const CONFIG = {
   RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
   EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
   NEWS_API: "https://hoboken-dashboard-production.up.railway.app/api/news",
+  SPORTS_API: "https://hoboken-dashboard-production.up.railway.app/api/sports",
   BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
@@ -171,6 +172,8 @@ export default function Dashboard() {
   const [eventPage, setEventPage] = useState(0);
   const [briefing, setBriefing] = useState(null);
   const [news, setNews] = useState([]);
+  const [sports, setSports] = useState({});
+  const [sportsLeague, setSportsLeague] = useState("nba");
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -258,6 +261,15 @@ export default function Dashboard() {
     } catch (e) { console.error("Briefing fetch failed:", e); }
   }, []);
 
+  const fetchSports = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.SPORTS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (Object.keys(data).length > 0) setSports(data);
+    } catch (e) { console.error("Sports fetch failed:", e); }
+  }, []);
+
   const fetchEvents = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.EVENTS_API);
@@ -275,13 +287,14 @@ export default function Dashboard() {
     fetchEvents();
     fetchBriefing();
     fetchNews();
+    fetchSports();
     const iv = setInterval(() => {
       fetchWeather();
       fetchStocks();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -582,6 +595,74 @@ export default function Dashboard() {
           })
         }
       </div>
+      <hr style={divider} />
+
+      {/* SPORTS */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Sports</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Standings & News</span>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {["nba","nfl","mlb"].map(l => (
+            <button key={l} onClick={() => setSportsLeague(l)}
+              style={{ background: sportsLeague === l ? C.purple : C.surface, border: `1px solid ${sportsLeague === l ? C.purple : C.border}`, color: sportsLeague === l ? "#fff" : C.text2, borderRadius: 5, padding: "3px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, textTransform: "uppercase" }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      {(() => {
+        const league = sports[sportsLeague];
+        if (!league) return <div style={{ padding: "16px 0", color: C.text3, fontSize: 13 }}>Loading...</div>;
+        const groups = {};
+        for (const t of league.teams) {
+          if (!groups[t.group]) groups[t.group] = [];
+          groups[t.group].push(t);
+        }
+        return (
+          <div style={{ marginBottom: 20 }}>
+            {/* Standings */}
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 40px 40px 60px 50px", gap: "0 8px", padding: "6px 14px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text3, fontWeight: 500 }}>
+                <span>Team</span><span style={{ textAlign: "center" }}>W</span><span style={{ textAlign: "center" }}>L</span><span style={{ textAlign: "center" }}>PCT</span><span style={{ textAlign: "center" }}>GB</span>
+              </div>
+              {Object.entries(groups).map(([grp, teams]) => (
+                <div key={grp}>
+                  {grp && <div style={{ fontSize: 11, color: C.text3, fontWeight: 600, padding: "5px 14px 2px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>{grp}</div>}
+                  {teams.map((t, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 40px 40px 60px 50px", gap: "0 8px", padding: "7px 14px", borderBottom: i < teams.length - 1 || Object.keys(groups).indexOf(grp) < Object.keys(groups).length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {t.logo && <img src={t.logo} alt={t.abbr} style={{ width: 20, height: 20, objectFit: "contain" }} />}
+                        <span style={{ fontSize: 13, color: C.text }}>{t.name}</span>
+                      </div>
+                      <span style={{ fontSize: 13, color: C.text, textAlign: "center" }}>{t.wins}</span>
+                      <span style={{ fontSize: 13, color: C.text, textAlign: "center" }}>{t.losses}</span>
+                      <span style={{ fontSize: 12, color: C.text2, textAlign: "center" }}>{t.pct}</span>
+                      <span style={{ fontSize: 12, color: C.text3, textAlign: "center" }}>{t.gb}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {/* News */}
+            {league.news.length > 0 && (
+              <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+                {league.news.map((n, i) => (
+                  <div key={i} style={{ padding: "9px 14px", borderBottom: i < league.news.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <a href={n.link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: C.text, textDecoration: "none", lineHeight: 1.4 }}
+                      onMouseEnter={e => e.target.style.color = C.blue}
+                      onMouseLeave={e => e.target.style.color = C.text}>
+                      {n.headline}
+                    </a>
+                    {n.date && <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       <hr style={divider} />
 
       {/* NEWS */}

@@ -321,6 +321,71 @@ app.get("/api/news", async (req, res) => {
   res.json(cachedNews || []);
 });
 
+const SPORTS = [
+  { key: "nba", sport: "basketball", league: "nba", label: "NBA" },
+  { key: "nfl", sport: "football",   league: "nfl", label: "NFL" },
+  { key: "mlb", sport: "baseball",   league: "mlb", label: "MLB" },
+];
+
+let cachedSports = null;
+let lastSportsFetch = 0;
+
+app.get("/api/sports", async (req, res) => {
+  const now = Date.now();
+  if (cachedSports && now - lastSportsFetch < 1800000) return res.json(cachedSports);
+
+  const result = {};
+  for (const { key, sport, league, label } of SPORTS) {
+    try {
+      const base = `https://site.api.espn.com/apis/v2/sports/${sport}/${league}`;
+      const [standRes, newsRes] = await Promise.all([
+        fetch(`${base}/standings`, { headers: { "User-Agent": "Mozilla/5.0" } }),
+        fetch(`https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/news?limit=5`, { headers: { "User-Agent": "Mozilla/5.0" } }),
+      ]);
+      const standData = await standRes.json();
+      const newsData = await newsRes.json();
+
+      // flatten all teams from all groups/divisions
+      const teams = [];
+      for (const group of (standData.children || [])) {
+        for (const div of (group.children || group.standings ? [group] : [])) {
+          for (const entry of (div.standings?.entries || [])) {
+            const stats = {};
+            for (const s of (entry.stats || [])) stats[s.name] = s.displayValue;
+            teams.push({
+              name: entry.team?.shortDisplayName || entry.team?.displayName,
+              abbr: entry.team?.abbreviation,
+              logo: entry.team?.logos?.[0]?.href,
+              wins: stats.wins || stats.W || "0",
+              losses: stats.losses || stats.L || "0",
+              pct: stats.winPercent || stats.PCT || "",
+              gb: stats.gamesBehind || stats.GB || "",
+              group: group.name || "",
+            });
+          }
+        }
+      }
+
+      const news = (newsData.articles || []).slice(0, 5).map(a => ({
+        headline: a.headline,
+        link: a.links?.web?.href || "",
+        date: a.published,
+      }));
+
+      result[key] = { label, teams, news };
+    } catch (e) {
+      console.error(`Sports fetch failed for ${key}:`, e.message);
+      result[key] = { label, teams: [], news: [] };
+    }
+  }
+
+  if (Object.values(result).some(r => r.teams.length > 0)) {
+    cachedSports = result;
+    lastSportsFetch = now;
+  }
+  res.json(cachedSports || {});
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", source: "panynj.gov", time: new Date().toISOString() });
 });

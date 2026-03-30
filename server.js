@@ -205,13 +205,17 @@ app.get("/api/briefing", async (req, res) => {
   if (cachedBriefing && lastBriefingDate === today) return res.json(cachedBriefing);
 
   try {
-    // Gather context from existing data
-    const [pathRes, weatherRes, stocksRes, eventsRes] = await Promise.all([
-      fetch(`http://localhost:${process.env.PORT || 3002}/api/path/hoboken`).then(r => r.json()).catch(() => ({})),
+    // Gather context from cached data and external APIs
+    const [pathData, weatherRes] = await Promise.all([
+      fetchPathData().catch(() => ({ results: [] })),
       fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=2").then(r => r.json()).catch(() => ({})),
-      fetch(`http://localhost:${process.env.PORT || 3002}/api/stocks`).then(r => r.json()).catch(() => []),
-      fetch(`http://localhost:${process.env.PORT || 3002}/api/events`).then(r => r.json()).catch(() => []),
     ]);
+
+    const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
+    const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
+    const pathRes = { toNY: toNYMsgs.map(m => ({ headsign: m.headSign, secondsAway: parseInt(m.secondsToArrival, 10) })) };
+    const stocksRes = cachedStocks || [];
+    const eventsRes = cachedEvents || [];
 
     const temp = weatherRes?.current?.temperature_2m;
     const wind = weatherRes?.current?.windspeed_10m;

@@ -42,6 +42,13 @@ const FERRY_SCHEDULES = {
     weekday: ["6:05 AM","6:25 AM","6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:25 AM","10:45 AM","11:05 AM","11:25 AM","11:45 AM","12:05 PM","12:25 PM","12:45 PM","1:05 PM","1:25 PM","1:45 PM","2:05 PM","2:25 PM","2:45 PM","3:05 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:00 PM"],
     returnWeekend: ["10:20 AM","10:50 AM","11:20 AM","11:50 AM","12:20 PM","12:50 PM","1:20 PM","1:50 PM","2:20 PM","2:50 PM","3:20 PM","3:50 PM","4:20 PM","4:50 PM","5:20 PM","5:50 PM","6:20 PM","6:50 PM","7:20 PM","7:40 PM","8:10 PM"],
     returnWeekday: ["6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:45 AM","11:25 AM","12:05 PM","12:45 PM","1:25 PM","2:05 PM","2:45 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:20 PM"]
+  },
+  midtownNJT: {
+    name: "Midtown / W 39th St", from: "Hoboken NJT Terminal", to: "W 39th St → Hoboken NJT", tripTime: 15,
+    weekend: ["10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM"],
+    weekday: ["6:25 AM","6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:25 AM","10:45 AM","11:05 AM","11:25 AM","11:45 AM","12:05 PM","12:25 PM","12:45 PM","1:05 PM","1:25 PM","1:45 PM","2:05 PM","2:25 PM","2:45 PM","3:05 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:05 PM","7:25 PM","7:45 PM","8:05 PM","8:45 PM","9:25 PM"],
+    returnWeekend: ["10:50 AM","11:20 AM","11:50 AM","12:20 PM","12:50 PM","1:20 PM","1:50 PM","2:20 PM","2:50 PM","3:20 PM","3:50 PM","4:20 PM","4:50 PM","5:20 PM","5:50 PM","6:20 PM","6:50 PM","7:20 PM","7:50 PM","8:20 PM","8:50 PM","9:20 PM"],
+    returnWeekday: ["7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:45 AM","11:25 AM","12:05 PM","12:45 PM","1:25 PM","2:05 PM","2:45 PM","3:25 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:05 PM","7:45 PM","8:25 PM","9:05 PM"]
   }
 };
 
@@ -279,8 +286,10 @@ export default function Dashboard() {
   const estTrains = getEstimatedPathTrains(now, 6);
   const midFerries = getNextScheduled(FERRY_SCHEDULES.midtown, now);
   const dnFerries = getNextScheduled(FERRY_SCHEDULES.downtown, now);
+  const midNJTFerries = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now);
   const midFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtown, now, 3, true);
   const dnFerriesReturn = getNextScheduled(FERRY_SCHEDULES.downtown, now, 3, true);
+  const midNJTFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now, 3, true);
   const busDeps = getNextScheduled(BUS_126, now, 4);
   const busReturn = getNextScheduled(BUS_126, now, 4, true);
 
@@ -290,9 +299,10 @@ export default function Dashboard() {
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: 20, boxSizing: "border-box" }}>
+      <style>{`@media (max-width: 600px) { .weather-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }`}</style>
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Hoboken dashboard</span>
+        <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Adam's dashboard</span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 14, color: C.text2, fontFamily: "monospace" }}>
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
@@ -306,9 +316,9 @@ export default function Dashboard() {
 
       {/* DAILY BRIEFING */}
       {briefing && (
-        <div style={{ background: "#0f0f1a", border: `1px solid #2d2554`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.purple}44`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span style={{ background: "#2d2554", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "3px 9px", borderRadius: 6 }}>AI</span>
+            <span style={{ background: C.purple + "33", color: C.purple, fontWeight: 600, fontSize: 12, padding: "3px 9px", borderRadius: 6 }}>AI</span>
             <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>Daily Briefing</span>
             <span style={{ fontSize: 11, color: C.text3, marginLeft: "auto" }}>{new Date(briefing.generatedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</span>
           </div>
@@ -318,25 +328,23 @@ export default function Dashboard() {
 
       {/* WEATHER */}
       <div style={sectionLabel}>Hoboken, NJ</div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        <div style={{ ...card, padding: "12px 16px", minWidth: 150 }}>
-          <div style={{ fontSize: 28, fontWeight: 600, color: C.text }}>{weather ? `${weather.temp}°F` : "..."}</div>
-          <div style={{ fontSize: 13, color: C.text2, marginTop: 2 }}>{weather ? (WMO_CODES[weather.code] || "Unknown") : "Loading..."}</div>
-          {weather?.wind != null && <div style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>Wind {weather.wind} mph</div>}
-          <div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>Now</div>
+      <div className="weather-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10, marginBottom: 20 }}>
+        <div style={{ ...card, padding: "12px 16px" }}>
+          <div style={{ fontSize: 26, fontWeight: 600, color: C.text }}>{weather ? `${weather.temp}°F` : "..."}</div>
+          <div style={{ fontSize: 12, color: C.text2, marginTop: 2 }}>{weather ? (WMO_CODES[weather.code] || "Unknown") : "Loading..."}</div>
+          {weather?.wind != null && <div style={{ fontSize: 11, color: C.text3, marginTop: 4 }}>Wind {weather.wind} mph</div>}
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>Now</div>
         </div>
-        <div style={{ display: "flex", gap: 10, flex: 1 }}>
-          {(weather?.daily || [{},{},{},{}]).map((d, i) => (
-            <div key={i} style={{ ...card, flex: 1, textAlign: "center", padding: "10px 12px" }}>
-              <div style={{ fontSize: 12, color: C.text2, marginBottom: 4 }}>{d.day || "..."}</div>
-              <div style={{ fontSize: 12, color: C.text3, marginBottom: 4 }}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{d.hi != null ? `${d.hi}°` : "..."}</div>
-              <div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{d.lo != null ? `${d.lo}°` : ""}</div>
-              <div style={{ fontSize: 11, color: C.blue, marginTop: 4 }}>{d.rain != null ? `${d.rain}% rain` : ""}</div>
-              <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{d.wind != null ? `${d.wind} mph` : ""}</div>
-            </div>
-          ))}
-        </div>
+        {(weather?.daily || [{},{},{},{}]).map((d, i) => (
+          <div key={i} style={{ ...card, textAlign: "center", padding: "10px 8px" }}>
+            <div style={{ fontSize: 12, color: C.text2, marginBottom: 4 }}>{d.day || "..."}</div>
+            <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{d.hi != null ? `${d.hi}°` : "..."}</div>
+            <div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{d.lo != null ? `${d.lo}°` : ""}</div>
+            <div style={{ fontSize: 11, color: C.blue, marginTop: 4 }}>{d.rain != null ? `${d.rain}%` : ""}</div>
+            <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{d.wind != null ? `${d.wind} mph` : ""}</div>
+          </div>
+        ))}
       </div>
       <hr style={divider} />
 
@@ -396,10 +404,11 @@ export default function Dashboard() {
         <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NY Waterway</span>
         <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
         {[
           { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
-          { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn }
+          { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
+          { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
         ].map(({ route, toData, fromData }, ri) => (
           <div key={ri} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px" }}>
             <div style={{ fontSize: 14, fontWeight: 500, color: C.text, marginBottom: 10 }}>{route.name}</div>

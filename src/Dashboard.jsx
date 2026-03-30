@@ -418,7 +418,7 @@ export default function Dashboard() {
 
       {/* HEADER */}
       <Group justify="space-between" mb="md">
-        <Text fw={700} size="lg">Adam's dashboard</Text>
+        <Text fw={700} size="lg">Gladdy's Life</Text>
         <Group gap="sm">
           <Text size="sm" c="dimmed" ff="monospace">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}

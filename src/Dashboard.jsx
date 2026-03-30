@@ -620,6 +620,7 @@ export default function Dashboard() {
           if (!groups[t.group]) groups[t.group] = [];
           groups[t.group].push(t);
         }
+        for (const g of Object.values(groups)) g.sort((a, b) => parseInt(b.wins) - parseInt(a.wins));
         return (
           <div style={{ marginBottom: 20 }}>
             {/* Standings */}

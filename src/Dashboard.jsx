@@ -323,10 +323,13 @@ export default function Dashboard() {
           .stock-header .stock-spacer { display: none !important; }
           .stock-header .stock-sparkline { display: none !important; }
           .ferry-grid { grid-template-columns: 1fr !important; }
+          .dashboard-grid { grid-template-columns: 1fr !important; }
+          .hero-bar { flex-wrap: wrap; gap: 8px !important; }
+          .hero-pill { flex: 1 1 40% !important; }
         }
       `}</style>
       {/* HEADER */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Adam's dashboard</span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 14, color: C.text2, fontFamily: "monospace" }}>
@@ -338,6 +341,43 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {/* HERO BAR */}
+      {(() => {
+        const nextPath = pathLive ? pathTrains.toNY[0] : estTrains[0];
+        const elapsed = pathTrains.fetchedAt ? (now - pathTrains.fetchedAt) / 1000 : 0;
+        const pathSecs = nextPath && pathLive ? Math.max(0, nextPath.secondsAway - elapsed) : null;
+        const pathMins = pathSecs != null ? Math.floor(pathSecs / 60) : (nextPath ? nextPath.minsAway : null);
+        const pathDisplay = pathSecs != null && pathSecs < 30 ? "Arriving" : pathMins === 0 ? "< 1 min" : pathMins != null ? `${pathMins} min` : "—";
+        const pathColor = pathMins != null && pathMins <= 3 ? C.red : pathMins != null && pathMins <= 8 ? C.amber : C.green;
+
+        const allFerries = [...midFerries, ...dnFerries, ...midNJTFerries].sort((a, b) => a.minsAway - b.minsAway);
+        const nextFerry = allFerries[0];
+        const ferryMins = nextFerry ? nextFerry.minsAway : null;
+        const ferryColor = ferryMins != null && ferryMins <= 5 ? C.red : ferryMins != null && ferryMins <= 15 ? C.amber : C.blue;
+
+        const pills = [
+          { label: "Weather", value: weather ? `${weather.temp}°F` : "—", sub: weather ? (WMO_CODES[weather.code] || "Clear") : "Loading", color: C.teal },
+          { label: "PATH to NYC", value: nextPath ? nextPath.headsign : "—", sub: pathDisplay, color: pathColor },
+          { label: "Ferry", value: nextFerry ? nextFerry.time : "—", sub: ferryMins != null ? `${ferryMins} min away` : "No more today", color: ferryColor },
+          { label: now.toLocaleDateString("en-US", { weekday: "long" }), value: now.toLocaleDateString("en-US", { month: "long", day: "numeric" }), sub: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }), color: C.purple },
+        ];
+        return (
+          <div className="hero-bar" style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+            {pills.map((p, i) => (
+              <div key={i} className="hero-pill" style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", borderTop: `3px solid ${p.color}` }}>
+                <div style={{ fontSize: 11, color: C.text3, marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, lineHeight: 1.2 }}>{p.value}</div>
+                <div style={{ fontSize: 12, color: p.color, marginTop: 3, fontWeight: 500 }}>{p.sub}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* TWO-COLUMN LAYOUT */}
+      <div className="dashboard-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
+      <div> {/* LEFT COLUMN — transit & weather */}
 
       {/* DAILY BRIEFING */}
       {briefing && (
@@ -486,9 +526,10 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-      <hr style={divider} />
 
-      
+      </div> {/* END LEFT COLUMN */}
+      <div> {/* RIGHT COLUMN — markets, food, events, sports, news */}
+
       {/* STOCKS */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
         <div style={sectionLabel}>Top 100 Stocks</div>
@@ -689,7 +730,8 @@ export default function Dashboard() {
           ))
         }
       </div>
-      <hr style={divider} />
+      </div> {/* END RIGHT COLUMN */}
+      </div> {/* END DASHBOARD GRID */}
 
       {/* FOOTER */}
       <div style={{ fontSize: 11, color: C.text3, display: "flex", justifyContent: "space-between" }}>

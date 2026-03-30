@@ -202,7 +202,7 @@ let cachedBriefing = null;
 let lastBriefingPeriod = null;
 
 function getTimePeriod() {
-  const h = new Date().getHours();
+  const h = parseInt(new Date().toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false }));
   if (h < 12) return "morning";
   if (h < 17) return "afternoon";
   return "evening";

@@ -17,15 +17,25 @@ const CONFIG = {
 // ========== SCHEDULE DATA ==========
 const PATH_SCHEDULES = {
   "33rd Street": {
-    color: "#4D92FB", routeName: "Hoboken - 33rd Street",
+    color: "#4D92FB", routeName: "Hoboken - 33rd Street", dir: "ny",
     weekend: { start: 360, end: 1380, interval: 20, offset: 0 },
     weekday: { start: 370, end: 1365, interval: 10, offset: 0 }
   },
   "World Trade Center": {
-    color: "#65C100", routeName: "Hoboken - World Trade Center",
+    color: "#65C100", routeName: "Hoboken - World Trade Center", dir: "ny",
     weekend: { start: 360, end: 1380, interval: 20, offset: 5 },
     weekday: { start: 360, end: 1380, interval: 10, offset: 5 }
-  }
+  },
+  "Newark": {
+    color: "#D93C2B", routeName: "Hoboken - Newark", dir: "nj",
+    weekend: { start: 375, end: 1380, interval: 30, offset: 0 },
+    weekday: { start: 365, end: 1365, interval: 15, offset: 0 }
+  },
+  "Journal Square": {
+    color: "#FF8000", routeName: "Hoboken - Journal Square", dir: "nj",
+    weekend: { start: 390, end: 1380, interval: 30, offset: 0 },
+    weekday: { start: 380, end: 1365, interval: 15, offset: 7 }
+  },
 };
 
 const FERRY_SCHEDULES = {
@@ -99,18 +109,22 @@ function getNextScheduled(route, nowDate, count = 3, returnTrip = false) {
 function getEstimatedPathTrains(nowDate, count = 6) {
   const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
   const isWeekend = nowDate.getDay() === 0 || nowDate.getDay() === 6;
-  const results = [];
+  const toNY = [], toNJ = [];
   for (const [headsign, cfg] of Object.entries(PATH_SCHEDULES)) {
     const sched = isWeekend ? cfg.weekend : cfg.weekday;
     let t = sched.start + sched.offset;
-    while (t <= sched.end && results.length < 20) {
+    while (t <= sched.end) {
       const diff = t - nowMin;
-      if (diff >= -1) results.push({ headsign, color: cfg.color, routeName: cfg.routeName, minsAway: Math.max(0, diff), timeStr: minsToTimeStr(t) });
+      if (diff >= -1) {
+        const entry = { headsign, color: cfg.color, routeName: cfg.routeName, minsAway: Math.max(0, diff), timeStr: minsToTimeStr(t) };
+        (cfg.dir === "nj" ? toNJ : toNY).push(entry);
+      }
       t += sched.interval;
     }
   }
-  results.sort((a, b) => a.minsAway - b.minsAway);
-  return results.slice(0, count);
+  toNY.sort((a, b) => a.minsAway - b.minsAway);
+  toNJ.sort((a, b) => a.minsAway - b.minsAway);
+  return { toNY: toNY.slice(0, count), toNJ: toNJ.slice(0, count) };
 }
 
 function fmtCountdown(m) { return m <= 0 ? "Now" : m === 1 ? "1 min" : `${m} min`; }
@@ -308,6 +322,7 @@ export default function Dashboard() {
           .stock-header { grid-template-columns: 28px 1fr 70px 62px !important; }
           .stock-header .stock-spacer { display: none !important; }
           .stock-header .stock-sparkline { display: none !important; }
+          .ferry-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
       {/* HEADER */}
@@ -362,7 +377,7 @@ export default function Dashboard() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ background: "#2d2554", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>PATH</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Hoboken to NYC</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>PATH Trains</span>
           <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, fontWeight: 500, background: pathLive ? "#14532d" : "#422006", color: pathLive ? "#4ade80" : "#fbbf24" }}>
             {pathLive ? "live" : "estimated"}
           </span>
@@ -396,17 +411,28 @@ export default function Dashboard() {
             )
           )}
         </div>
-      ) : estTrains.map((t, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: i < estTrains.length - 1 ? `1px solid ${C.border}` : "none" }}>
-          <div style={{ width: 4, height: 30, borderRadius: 2, background: t.color }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t.headsign}</div>
-            <div style={{ fontSize: 12, color: C.text2 }}>{t.routeName}</div>
-          </div>
-          <span style={{ fontSize: 12, color: C.text3 }}>{t.timeStr}</span>
-          <div style={{ fontSize: t.minsAway <= 5 ? 18 : 16, fontWeight: 600, minWidth: 56, textAlign: "right", color: t.minsAway <= 3 ? C.red : C.text }}>~{fmtCountdown(t.minsAway)}</div>
+      ) : (
+        <div>
+          {[{ label: "To NYC", trains: estTrains.toNY }, { label: "To NJ", trains: estTrains.toNJ }].map(({ label, trains }) =>
+            trains.length === 0 ? null : (
+              <div key={label}>
+                <div style={{ fontSize: 12, color: C.text3, marginBottom: 4, marginTop: label === "To NJ" ? 12 : 0 }}>{label}</div>
+                {trains.map((t, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: i < trains.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                    <div style={{ width: 4, height: 30, borderRadius: 2, background: t.color }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t.headsign}</div>
+                      <div style={{ fontSize: 12, color: C.text2 }}>{t.routeName}</div>
+                    </div>
+                    <span style={{ fontSize: 12, color: C.text3 }}>{t.timeStr}</span>
+                    <div style={{ fontSize: t.minsAway <= 5 ? 18 : 16, fontWeight: 600, minWidth: 56, textAlign: "right", color: t.minsAway <= 3 ? C.red : C.text }}>~{fmtCountdown(t.minsAway)}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
         </div>
-      ))}
+      )}
 
       {/* FERRY */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 12px" }}>
@@ -414,7 +440,7 @@ export default function Dashboard() {
         <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NY Waterway</span>
         <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
+      <div className="ferry-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
         {[
           { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
           { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },

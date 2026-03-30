@@ -7,6 +7,7 @@ const CONFIG = {
   STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
   RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
   EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
+  BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   // Open-Meteo: free, no key needed
   WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
   REFRESH_INTERVAL: 300000, // 5 minutes
@@ -28,21 +29,28 @@ const PATH_SCHEDULES = {
 
 const FERRY_SCHEDULES = {
   midtown: {
-    name: "Midtown / W 39th St", from: "Hoboken 14th St", tripTime: 12,
+    name: "Midtown / W 39th St", from: "Hoboken 14th St", to: "W 39th St → Hoboken 14th St", tripTime: 12,
     weekend: ["10:02 AM","10:22 AM","10:42 AM","11:02 AM","11:22 AM","11:42 AM","12:02 PM","12:22 PM","12:42 PM","1:02 PM","1:22 PM","1:42 PM","2:02 PM","2:22 PM","2:42 PM","3:02 PM","3:22 PM","3:42 PM","4:02 PM","4:22 PM","4:42 PM","5:02 PM","5:22 PM","5:42 PM","6:02 PM","6:22 PM","6:42 PM","7:02 PM","7:22 PM","7:42 PM","8:02 PM","8:22 PM","8:42 PM","9:02 PM","9:22 PM"],
-    weekday: ["6:40 AM","7:00 AM","7:20 AM","7:40 AM","8:00 AM","8:20 AM","8:40 AM","9:00 AM","9:18 AM","9:38 AM","9:58 AM","10:18 AM","10:38 AM","10:58 AM","11:18 AM","11:38 AM","11:58 AM","12:18 PM","12:38 PM","12:58 PM","1:18 PM","1:38 PM","1:58 PM","2:18 PM","2:38 PM","2:58 PM","3:18 PM","3:38 PM","3:58 PM","4:18 PM","4:38 PM","4:58 PM","5:18 PM","5:38 PM","5:58 PM","6:18 PM","6:38 PM","6:58 PM","7:18 PM","7:38 PM","7:58 PM","8:18 PM","8:38 PM","8:58 PM","9:18 PM"]
+    weekday: ["6:40 AM","7:00 AM","7:20 AM","7:40 AM","8:00 AM","8:20 AM","8:40 AM","9:00 AM","9:18 AM","9:38 AM","9:58 AM","10:18 AM","10:38 AM","10:58 AM","11:18 AM","11:38 AM","11:58 AM","12:18 PM","12:38 PM","12:58 PM","1:18 PM","1:38 PM","1:58 PM","2:18 PM","2:38 PM","2:58 PM","3:18 PM","3:38 PM","3:58 PM","4:18 PM","4:38 PM","4:58 PM","5:18 PM","5:38 PM","5:58 PM","6:18 PM","6:38 PM","6:58 PM","7:18 PM","7:38 PM","7:58 PM","8:18 PM","8:38 PM","8:58 PM","9:18 PM"],
+    returnWeekend: ["10:20 AM","10:40 AM","11:00 AM","11:20 AM","11:40 AM","12:00 PM","12:20 PM","12:40 PM","1:00 PM","1:20 PM","1:40 PM","2:00 PM","2:20 PM","2:40 PM","3:00 PM","3:20 PM","3:40 PM","4:00 PM","4:20 PM","4:40 PM","5:00 PM","5:20 PM","5:40 PM","6:00 PM","6:20 PM","6:40 PM","7:00 PM","7:20 PM","7:40 PM","8:00 PM","8:20 PM","8:40 PM","9:00 PM","9:20 PM","9:40 PM"],
+    returnWeekday: ["7:18 AM","7:38 AM","7:58 AM","8:18 AM","8:38 AM","8:58 AM","9:18 AM","9:38 AM","9:58 AM","10:18 AM","10:58 AM","11:38 AM","12:18 PM","12:58 PM","1:38 PM","2:18 PM","2:58 PM","3:38 PM","3:58 PM","4:18 PM","4:38 PM","4:58 PM","5:18 PM","5:38 PM","5:58 PM","6:18 PM","6:38 PM","6:58 PM","7:18 PM","7:58 PM","8:38 PM","9:18 PM","9:58 PM"]
   },
   downtown: {
-    name: "Brookfield Place", from: "Hoboken NJT Terminal", tripTime: 10,
+    name: "Brookfield Place", from: "Hoboken NJT Terminal", to: "Brookfield Place → Hoboken NJT", tripTime: 10,
     weekend: ["10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:20 PM","7:50 PM"],
-    weekday: ["6:05 AM","6:25 AM","6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:25 AM","10:45 AM","11:05 AM","11:25 AM","11:45 AM","12:05 PM","12:25 PM","12:45 PM","1:05 PM","1:25 PM","1:45 PM","2:05 PM","2:25 PM","2:45 PM","3:05 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:00 PM"]
+    weekday: ["6:05 AM","6:25 AM","6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:25 AM","10:45 AM","11:05 AM","11:25 AM","11:45 AM","12:05 PM","12:25 PM","12:45 PM","1:05 PM","1:25 PM","1:45 PM","2:05 PM","2:25 PM","2:45 PM","3:05 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:00 PM"],
+    returnWeekend: ["10:20 AM","10:50 AM","11:20 AM","11:50 AM","12:20 PM","12:50 PM","1:20 PM","1:50 PM","2:20 PM","2:50 PM","3:20 PM","3:50 PM","4:20 PM","4:50 PM","5:20 PM","5:50 PM","6:20 PM","6:50 PM","7:20 PM","7:40 PM","8:10 PM"],
+    returnWeekday: ["6:45 AM","7:05 AM","7:25 AM","7:45 AM","8:05 AM","8:25 AM","8:45 AM","9:05 AM","9:25 AM","9:45 AM","10:05 AM","10:45 AM","11:25 AM","12:05 PM","12:45 PM","1:25 PM","2:05 PM","2:45 PM","3:25 PM","3:45 PM","4:05 PM","4:25 PM","4:45 PM","5:05 PM","5:25 PM","5:45 PM","6:05 PM","6:25 PM","6:45 PM","7:20 PM"]
   }
 };
 
 const BUS_126 = {
   name: "Port Authority / 42nd St", from: "Hoboken Terminal", tripTime: 22,
   weekday: ["5:10 AM","5:35 AM","5:55 AM","6:10 AM","6:20 AM","6:30 AM","6:40 AM","6:50 AM","7:00 AM","7:10 AM","7:20 AM","7:30 AM","7:40 AM","7:50 AM","8:00 AM","8:10 AM","8:20 AM","8:30 AM","8:40 AM","8:50 AM","9:00 AM","9:10 AM","9:20 AM","9:30 AM","9:40 AM","9:55 AM","10:10 AM","10:25 AM","10:40 AM","10:55 AM","11:10 AM","11:25 AM","11:40 AM","11:55 AM","12:10 PM","12:25 PM","12:40 PM","12:55 PM","1:10 PM","1:25 PM","1:40 PM","1:55 PM","2:10 PM","2:25 PM","2:40 PM","2:55 PM","3:10 PM","3:25 PM","3:40 PM","3:55 PM","4:10 PM","4:25 PM","4:40 PM","4:55 PM","5:10 PM","5:25 PM","5:40 PM","5:55 PM","6:10 PM","6:25 PM","6:40 PM","6:55 PM","7:10 PM","7:25 PM","7:40 PM","8:00 PM","8:20 PM","8:40 PM","9:00 PM","9:20 PM","9:40 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM"],
-  weekend: ["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:00 AM"]
+  weekend: ["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:00 AM"],
+  returnName: "Hoboken Terminal", returnFrom: "Port Authority / 42nd St",
+  returnWeekday: ["6:00 AM","6:30 AM","7:00 AM","7:15 AM","7:30 AM","7:45 AM","8:00 AM","8:15 AM","8:30 AM","8:45 AM","9:00 AM","9:15 AM","9:30 AM","9:45 AM","10:00 AM","10:20 AM","10:40 AM","11:00 AM","11:20 AM","11:40 AM","12:00 PM","12:20 PM","12:40 PM","1:00 PM","1:20 PM","1:40 PM","2:00 PM","2:20 PM","2:40 PM","3:00 PM","3:20 PM","3:40 PM","4:00 PM","4:20 PM","4:40 PM","5:00 PM","5:15 PM","5:30 PM","5:45 PM","6:00 PM","6:15 PM","6:30 PM","6:45 PM","7:00 PM","7:20 PM","7:40 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM"],
+  returnWeekend: ["7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:30 AM"]
 };
 
 // ========== UTILITIES ==========
@@ -63,10 +71,12 @@ function minsToTimeStr(totalMins) {
   return `${h}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-function getNextScheduled(route, nowDate, count = 3) {
+function getNextScheduled(route, nowDate, count = 3, returnTrip = false) {
   const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
   const isWeekend = nowDate.getDay() === 0 || nowDate.getDay() === 6;
-  const schedule = isWeekend ? route.weekend : route.weekday;
+  const schedule = returnTrip
+    ? (isWeekend ? route.returnWeekend : route.returnWeekday)
+    : (isWeekend ? route.weekend : route.weekday);
   const upcoming = [];
   for (const t of schedule) {
     const diff = parseTimeStr(t) - nowMin;
@@ -143,6 +153,7 @@ export default function Dashboard() {
   const [restaurantIdx, setRestaurantIdx] = useState(0);
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
+  const [briefing, setBriefing] = useState(null);
   const [refreshCount, setRefreshCount] = useState(0);
 
   // Clock tick every second
@@ -211,6 +222,15 @@ export default function Dashboard() {
     } catch (e) { console.error("Restaurant fetch failed:", e); }
   }, []);
 
+  const fetchBriefing = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.BRIEFING_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setBriefing(data);
+    } catch (e) { console.error("Briefing fetch failed:", e); }
+  }, []);
+
   const fetchEvents = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.EVENTS_API);
@@ -226,19 +246,23 @@ export default function Dashboard() {
     fetchStocks();
     fetchRestaurants();
     fetchEvents();
+    fetchBriefing();
     const iv = setInterval(() => {
       fetchWeather();
       fetchStocks();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
   const midFerries = getNextScheduled(FERRY_SCHEDULES.midtown, now);
   const dnFerries = getNextScheduled(FERRY_SCHEDULES.downtown, now);
+  const midFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtown, now, 3, true);
+  const dnFerriesReturn = getNextScheduled(FERRY_SCHEDULES.downtown, now, 3, true);
   const busDeps = getNextScheduled(BUS_126, now, 4);
+  const busReturn = getNextScheduled(BUS_126, now, 4, true);
 
   const sectionLabel = { fontSize: 13, color: C.text2, marginBottom: 8, fontWeight: 500 };
   const divider = { border: "none", borderTop: `1px solid ${C.border}`, margin: "0 0 20px 0" };
@@ -253,6 +277,18 @@ export default function Dashboard() {
           {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
         </span>
       </div>
+
+      {/* DAILY BRIEFING */}
+      {briefing && (
+        <div style={{ background: "#0f0f1a", border: `1px solid #2d2554`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ background: "#2d2554", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "3px 9px", borderRadius: 6 }}>AI</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>Daily Briefing</span>
+            <span style={{ fontSize: 11, color: C.text3, marginLeft: "auto" }}>{new Date(briefing.generatedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</span>
+          </div>
+          <div style={{ fontSize: 14, color: C.text2, lineHeight: 1.6 }}>{briefing.text}</div>
+        </div>
+      )}
 
       {/* WEATHER */}
       <div style={sectionLabel}>Hoboken, NJ</div>
@@ -335,12 +371,22 @@ export default function Dashboard() {
         <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
-        {[{ route: FERRY_SCHEDULES.midtown, data: midFerries }, { route: FERRY_SCHEDULES.downtown, data: dnFerries }].map(({ route, data }, ri) => (
+        {[
+          { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
+          { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn }
+        ].map(({ route, toData, fromData }, ri) => (
           <div key={ri} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: C.text, marginBottom: 2 }}>{route.name}</div>
-            <div style={{ fontSize: 12, color: C.text3, marginBottom: 10 }}>from {route.from} · ~{route.tripTime} min</div>
-            {data.length === 0 ? <div style={{ fontSize: 13, color: C.text2, padding: "8px 0" }}>No more today</div> : data.map((f, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < data.length - 1 ? `1px solid ${C.border}` : "none" }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: C.text, marginBottom: 10 }}>{route.name}</div>
+            <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>→ NYC · from {route.from} · ~{route.tripTime} min</div>
+            {toData.length === 0 ? <div style={{ fontSize: 13, color: C.text2, padding: "4px 0 8px" }}>No more today</div> : toData.map((f, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < toData.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.text2 }}>{f.time}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: f.minsAway <= 10 ? C.blue : C.text }}>{fmtCountdown(f.minsAway)}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: C.text3, margin: "10px 0 4px" }}>→ Hoboken · from {route.to?.split("→")[0].trim()}</div>
+            {fromData.length === 0 ? <div style={{ fontSize: 13, color: C.text2, padding: "4px 0" }}>No more today</div> : fromData.map((f, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < fromData.length - 1 ? `1px solid ${C.border}` : "none" }}>
                 <span style={{ fontSize: 13, color: C.text2 }}>{f.time}</span>
                 <span style={{ fontSize: 14, fontWeight: 500, color: f.minsAway <= 10 ? C.blue : C.text }}>{fmtCountdown(f.minsAway)}</span>
               </div>
@@ -356,15 +402,25 @@ export default function Dashboard() {
         <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
       </div>
       <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: C.text, marginBottom: 2 }}>{BUS_126.name}</div>
-        <div style={{ fontSize: 12, color: C.text3, marginBottom: 10 }}>from {BUS_126.from} · ~{BUS_126.tripTime} min</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0 24px" }}>
-          {busDeps.map((b, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < busDeps.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <span style={{ fontSize: 13, color: C.text2 }}>{b.time}</span>
-              <span style={{ fontSize: 14, fontWeight: 500, color: b.minsAway <= 10 ? C.coral : C.text }}>{fmtCountdown(b.minsAway)}</span>
-            </div>
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
+          <div>
+            <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>→ NYC · from {BUS_126.from} · ~{BUS_126.tripTime} min</div>
+            {busDeps.map((b, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < busDeps.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.text2 }}>{b.time}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: b.minsAway <= 10 ? C.coral : C.text }}>{fmtCountdown(b.minsAway)}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>→ Hoboken · from {BUS_126.returnFrom}</div>
+            {busReturn.map((b, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < busReturn.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.text2 }}>{b.time}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: b.minsAway <= 10 ? C.coral : C.text }}>{fmtCountdown(b.minsAway)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       <hr style={divider} />

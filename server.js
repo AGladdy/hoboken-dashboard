@@ -79,10 +79,9 @@ async function fetchBatch(symbols) {
   ));
 }
 
-app.get("/api/stocks", async (req, res) => {
+async function fetchAndCacheStocks() {
   const now = Date.now();
-  if (cachedStocks && now - lastStockFetch < 300000) return res.json(cachedStocks);
-
+  if (cachedStocks && now - lastStockFetch < 300000) return;
   try {
     const all = [];
     const batchSize = 10;
@@ -91,7 +90,6 @@ app.get("/api/stocks", async (req, res) => {
       all.push(...batch);
       if (i + batchSize < TOP_100.length) await new Promise(r => setTimeout(r, 150));
     }
-
     const result = all.map((data, idx) => {
       const meta = data?.chart?.result?.[0]?.meta;
       const closes = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
@@ -106,16 +104,15 @@ app.get("/api/stocks", async (req, res) => {
         sparkline: closes,
       };
     }).filter(Boolean);
-
-    if (result.length > 0) {
-      cachedStocks = result;
-      lastStockFetch = now;
-    }
-    res.json(cachedStocks || []);
+    if (result.length > 0) { cachedStocks = result; lastStockFetch = now; }
   } catch (e) {
     console.error("Stock fetch failed:", e.message);
-    res.json(cachedStocks || []);
   }
+}
+
+app.get("/api/stocks", async (req, res) => {
+  await fetchAndCacheStocks();
+  res.json(cachedStocks || []);
 });
 
 const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;
@@ -318,6 +315,7 @@ app.get("/api/stock-digest", async (req, res) => {
   const now = Date.now();
   if (cachedStockDigest && now - lastStockDigestFetch < 1800000) return res.json(cachedStockDigest);
 
+  if (!cachedStocks || cachedStocks.length === 0) await fetchAndCacheStocks();
   const stocks = cachedStocks;
   if (!stocks || stocks.length === 0) return res.json({ text: "", generatedAt: new Date().toISOString() });
 

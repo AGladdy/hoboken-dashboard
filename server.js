@@ -199,11 +199,18 @@ app.get("/api/events", async (req, res) => {
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let cachedBriefing = null;
-let lastBriefingDate = null;
+let lastBriefingPeriod = null;
+
+function getTimePeriod() {
+  const h = new Date().getHours();
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
+  return "evening";
+}
 
 app.get("/api/briefing", async (req, res) => {
-  const today = new Date().toDateString();
-  if (cachedBriefing && lastBriefingDate === today) return res.json(cachedBriefing);
+  const period = `${new Date().toDateString()}-${getTimePeriod()}`;
+  if (cachedBriefing && lastBriefingPeriod === period) return res.json(cachedBriefing);
 
   try {
     // Gather context from cached data and external APIs
@@ -228,9 +235,11 @@ app.get("/api/briefing", async (req, res) => {
     const nextTrains = (pathRes?.toNY || []).slice(0, 2).map(t => `${t.headsign} in ${Math.round(t.secondsAway / 60)}min`).join(", ");
     const topHeadlines = (cachedNews || []).slice(0, 5).map(n => n.title).join("; ");
 
-    const prompt = `You are a friendly morning assistant for someone living in Hoboken, NJ who commutes to NYC.
+    const timePeriod = getTimePeriod();
+    const greeting = timePeriod === "morning" ? "Good morning" : timePeriod === "afternoon" ? "Good afternoon" : "Good evening";
+    const prompt = `You are a friendly ${timePeriod} assistant for Adam, who lives in Hoboken, NJ and commutes to NYC.
 
-Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}.
+Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} (${timePeriod}). Start the briefing with "${greeting}, Adam!".
 
 Current conditions:
 - Weather: ${temp}°F, high ${hiTemp}°F / low ${loTemp}°F, wind ${wind} mph, ${rainChance}% chance of rain
@@ -239,7 +248,7 @@ Current conditions:
 - Events in NYC today: ${todayEvents || "none found"}
 - Top news headlines: ${topHeadlines || "none available"}
 
-Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whether to bring an umbrella, commute, and anything notable happening. Be conversational and concise, like a smart friend giving you the morning rundown. End with one short motivational or witty line. Do not use markdown, headers, or bullet points — plain text only.`;
+Write a short, upbeat ${timePeriod} briefing in 3-4 sentences. For morning: cover weather, commute, and the day ahead. For afternoon: check in on the day, weather, and any evening plans. For evening: wrap up the day, tomorrow's weather outlook, and a wind-down note. Be conversational and concise. End with one short motivational or witty line. Do not use markdown, headers, or bullet points — plain text only.`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -251,7 +260,7 @@ Write a short, upbeat daily briefing in 3-4 sentences. Cover the weather, whethe
       text: message.content[0].text.replace(/^#+\s*/gm, "").trim(),
       generatedAt: new Date().toISOString(),
     };
-    lastBriefingDate = today;
+    lastBriefingPeriod = period;
     res.json(cachedBriefing);
   } catch (e) {
     console.error("Briefing failed:", e.message);

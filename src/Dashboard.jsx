@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
+  Button, Anchor, Table, Divider, SegmentedControl, ActionIcon,
+  useMantineColorScheme, useComputedColorScheme,
+} from "@mantine/core";
 
 // ========== CONFIG ==========
-// Add your API keys here if you have them
 const CONFIG = {
   PATH_API: "https://hoboken-dashboard-production.up.railway.app/api/path/hoboken",
   STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
@@ -10,9 +14,10 @@ const CONFIG = {
   NEWS_API: "https://hoboken-dashboard-production.up.railway.app/api/news",
   SPORTS_API: "https://hoboken-dashboard-production.up.railway.app/api/sports",
   BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
-  // Open-Meteo: free, no key needed
-  WEATHER_API: "https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=5",
-  REFRESH_INTERVAL: 300000, // 5 minutes
+  WEATHER_NARRATIVE_API: "https://hoboken-dashboard-production.up.railway.app/api/weather-narrative",
+  STOCK_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/stock-digest",
+  WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
+  REFRESH_INTERVAL: 300000,
 };
 
 // ========== SCHEDULE DATA ==========
@@ -20,12 +25,12 @@ const PATH_SCHEDULES = {
   "33rd Street": {
     color: "#4D92FB", routeName: "Hoboken - 33rd Street",
     weekend: { start: 360, end: 1380, interval: 20, offset: 0 },
-    weekday: { start: 370, end: 1365, interval: 10, offset: 0 }
+    weekday: { start: 370, end: 1365, interval: 10, offset: 0 },
   },
   "World Trade Center": {
     color: "#65C100", routeName: "Hoboken - World Trade Center",
     weekend: { start: 360, end: 1380, interval: 20, offset: 5 },
-    weekday: { start: 360, end: 1380, interval: 10, offset: 5 }
+    weekday: { start: 360, end: 1380, interval: 10, offset: 5 },
   },
 };
 
@@ -59,7 +64,7 @@ const BUS_126 = {
   weekend: ["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:00 AM"],
   returnName: "Hoboken Terminal", returnFrom: "Port Authority / 42nd St",
   returnWeekday: ["6:00 AM","6:30 AM","7:00 AM","7:15 AM","7:30 AM","7:45 AM","8:00 AM","8:15 AM","8:30 AM","8:45 AM","9:00 AM","9:15 AM","9:30 AM","9:45 AM","10:00 AM","10:20 AM","10:40 AM","11:00 AM","11:20 AM","11:40 AM","12:00 PM","12:20 PM","12:40 PM","1:00 PM","1:20 PM","1:40 PM","2:00 PM","2:20 PM","2:40 PM","3:00 PM","3:20 PM","3:40 PM","4:00 PM","4:20 PM","4:40 PM","5:00 PM","5:15 PM","5:30 PM","5:45 PM","6:00 PM","6:15 PM","6:30 PM","6:45 PM","7:00 PM","7:20 PM","7:40 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM"],
-  returnWeekend: ["7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:30 AM"]
+  returnWeekend: ["7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM","9:30 PM","10:00 PM","10:30 PM","11:00 PM","11:30 PM","12:00 AM","12:30 AM","1:30 AM"],
 };
 
 // ========== UTILITIES ==========
@@ -89,9 +94,7 @@ function getNextScheduled(route, nowDate, count = 3, returnTrip = false) {
   const upcoming = [];
   for (const t of schedule) {
     const diff = parseTimeStr(t) - nowMin;
-    if (diff > -2) {
-      upcoming.push({ time: t, minsAway: Math.max(0, diff) });
-    }
+    if (diff > -2) upcoming.push({ time: t, minsAway: Math.max(0, diff) });
     if (upcoming.length >= count) break;
   }
   return upcoming;
@@ -116,14 +119,21 @@ function getEstimatedPathTrains(nowDate, count = 6) {
 
 function fmtCountdown(m) { return m <= 0 ? "Now" : m === 1 ? "1 min" : `${m} min`; }
 
+// Shared PATH live countdown calculation
+function calcLiveCountdown(train, fetchedAt, now) {
+  const elapsed = fetchedAt ? (now - fetchedAt) / 1000 : 0;
+  const secs = Math.max(0, train.secondsAway - elapsed);
+  const mins = Math.floor(secs / 60);
+  const display = secs < 30 ? "Arriving" : mins === 0 ? "< 1 min" : mins === 1 ? "1 min" : `${mins} min`;
+  return { mins, display };
+}
+
 const WMO_CODES = {0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",51:"Light drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",71:"Light snow",73:"Snow",75:"Heavy snow",80:"Rain showers",95:"Thunderstorm"};
-const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // ========== SPARKLINE ==========
 function Sparkline({ data, positive }) {
   if (!data || data.length < 2) return <svg width={80} height={28} />;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const min = Math.min(...data), max = Math.max(...data);
   const range = max - min || 1;
   const w = 80, h = 28, pad = 2;
   const pts = data.map((v, i) => [
@@ -141,29 +151,53 @@ function Sparkline({ data, positive }) {
   );
 }
 
-// ========== COLORS ==========
-const DARK = {
-  bg: "#0a0a0a", surface: "#161616", border: "#262626", borderLight: "#333",
-  text: "#e5e5e5", text2: "#999", text3: "#666",
-  red: "#ef4444", green: "#22c55e", blue: "#3b82f6", amber: "#f59e0b",
-  purple: "#8b5cf6", teal: "#14b8a6", coral: "#f97316",
-};
-const LIGHT = {
-  bg: "#f5f5f5", surface: "#ffffff", border: "#e0e0e0", borderLight: "#cccccc",
-  text: "#111111", text2: "#555555", text3: "#999999",
-  red: "#dc2626", green: "#16a34a", blue: "#2563eb", amber: "#d97706",
-  purple: "#7c3aed", teal: "#0f766e", coral: "#ea580c",
-};
+// ========== SECTION HEADER ==========
+function SectionHeader({ badge, badgeColor = "violet", title, right }) {
+  return (
+    <Group justify="space-between" mb="sm">
+      <Group gap="xs">
+        <Badge color={badgeColor} variant="filled" size="sm" radius="sm">{badge}</Badge>
+        <Text fw={500} size="sm">{title}</Text>
+      </Group>
+      {right}
+    </Group>
+  );
+}
+
+// ========== TRANSIT ROW ==========
+function TransitRow({ color, headsign, subtitle, right, badge, isLast }) {
+  return (
+    <Box py="xs" style={{ borderBottom: isLast ? "none" : "1px solid var(--mantine-color-default-border)" }}>
+      <Group justify="space-between" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          <Box w={4} h={30} style={{ borderRadius: 2, background: color, flexShrink: 0 }} />
+          <Box>
+            <Text size="sm" fw={500}>{headsign}</Text>
+            {subtitle && <Text size="xs" c="dimmed">{subtitle}</Text>}
+          </Box>
+        </Group>
+        <Group gap="xs" wrap="nowrap">
+          {badge}
+          {right}
+        </Group>
+      </Group>
+    </Box>
+  );
+}
 
 // ========== MAIN COMPONENT ==========
 export default function Dashboard() {
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") !== "light");
-  const C = darkMode ? DARK : LIGHT;
+  const { setColorScheme } = useMantineColorScheme();
+  const colorScheme = useComputedColorScheme("dark");
+  const dark = colorScheme === "dark";
+
   const [now, setNow] = useState(new Date());
   const [pathTrains, setPathTrains] = useState({ toNY: [], toNJ: [], toNJFrom33S: [], fetchedAt: null });
   const [pathLive, setPathLive] = useState(false);
   const [pathUpdated, setPathUpdated] = useState(null);
   const [weather, setWeather] = useState(null);
+  const coordsRef = useRef({ lat: 40.744, lon: -74.032 });
+  const [locationLabel, setLocationLabel] = useState("Hoboken, NJ");
   const [stocks, setStocks] = useState([]);
   const [stockPage, setStockPage] = useState(0);
   const [restaurants, setRestaurants] = useState([]);
@@ -171,23 +205,24 @@ export default function Dashboard() {
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
   const [briefing, setBriefing] = useState(null);
+  const [weatherNarrative, setWeatherNarrative] = useState(null);
+  const [stockDigest, setStockDigest] = useState(null);
   const [news, setNews] = useState([]);
   const [sports, setSports] = useState({});
   const [sportsLeague, setSportsLeague] = useState("nba");
   const [refreshCount, setRefreshCount] = useState(0);
 
-  // Clock tick every second
-  useEffect(() => { const iv = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(iv); }, []);
+  useEffect(() => {
+    const iv = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
-  // PATH: poll every 15s via PANYNJ official JSON
   const fetchPath = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.PATH_API + "?t=" + Date.now());
       if (!res.ok) throw new Error();
       const data = await res.json();
-      const toNY = data.toNY || [];
-      const toNJ = data.toNJ || [];
-      const toNJFrom33S = data.toNJFrom33S || [];
+      const toNY = data.toNY || [], toNJ = data.toNJ || [], toNJFrom33S = data.toNJFrom33S || [];
       if (toNY.length > 0 || toNJ.length > 0 || toNJFrom33S.length > 0) {
         setPathTrains({ toNY, toNJ, toNJFrom33S, fetchedAt: data.dataFetchedAt || Date.now() });
         setPathLive(true);
@@ -197,28 +232,54 @@ export default function Dashboard() {
       }
     } catch { setPathLive(false); }
   }, []);
-  useEffect(() => { fetchPath(); const iv = setInterval(fetchPath, 20000); return () => clearInterval(iv); }, [fetchPath]);
 
-  // Weather: fetch on mount + every 5 min
+  useEffect(() => {
+    fetchPath();
+    const iv = setInterval(fetchPath, 20000);
+    return () => clearInterval(iv);
+  }, [fetchPath]);
+
   const fetchWeather = useCallback(async () => {
+    const { lat, lon } = coordsRef.current;
     try {
-      const res = await fetch(CONFIG.WEATHER_API);
+      const res = await fetch(CONFIG.WEATHER_API(lat, lon));
+      if (!res.ok) throw new Error();
       const data = await res.json();
+      const allDaily = (data.daily?.time || []).map((_, i) => ({
+        day: new Date(data.daily.time[i] + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }),
+        hi: Math.round(data.daily.temperature_2m_max[i]),
+        lo: Math.round(data.daily.temperature_2m_min[i]),
+        code: data.daily.weathercode[i],
+        rain: data.daily.precipitation_probability_max[i],
+        wind: Math.round(data.daily.windspeed_10m_max[i]),
+      }));
       setWeather({
         temp: Math.round(data.current.temperature_2m),
         code: data.current.weathercode,
         wind: Math.round(data.current.windspeed_10m),
-        daily: data.daily.time.slice(1, 5).map((d, i) => ({
-          day: DAYS[new Date(d + "T12:00:00").getDay()],
-          hi: Math.round(data.daily.temperature_2m_max[i + 1]),
-          lo: Math.round(data.daily.temperature_2m_min[i + 1]),
-          rain: data.daily.precipitation_probability_max[i + 1],
-          wind: Math.round(data.daily.windspeed_10m_max[i + 1]),
-          code: data.daily.weathercode[i + 1],
-        }))
+        hi: allDaily[0]?.hi,
+        lo: allDaily[0]?.lo,
+        rain: allDaily[0]?.rain,
+        daily: allDaily.slice(1, 5),
       });
     } catch (e) { console.error("Weather fetch failed:", e); }
   }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(async ({ coords: { latitude, longitude } }) => {
+      coordsRef.current = { lat: latitude, lon: longitude };
+      fetchWeather();
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+        const data = await res.json();
+        const city = data.address?.city || data.address?.town || data.address?.village || data.address?.suburb;
+        const state = data.address?.state;
+        const resolvedCity = city === "Jersey City" ? "Hoboken" : city;
+        if (resolvedCity && state) setLocationLabel(`${resolvedCity}, ${state}`);
+      } catch { /* keep default */ }
+    });
+  }, [fetchWeather]);
 
   const fetchStocks = useCallback(async () => {
     try {
@@ -226,7 +287,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.length > 0) setStocks(data);
-    } catch (e) { console.error("Stock fetch failed:", e); }
+    } catch (e) { console.error("Stocks fetch failed:", e); }
   }, []);
 
   const fetchRestaurants = useCallback(async () => {
@@ -234,12 +295,7 @@ export default function Dashboard() {
       const res = await fetch(CONFIG.RESTAURANTS_API);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      if (data.length > 0) {
-        setRestaurants(data);
-        // Pick today's suggestion based on day of year
-        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-        setRestaurantIdx(dayOfYear % data.length);
-      }
+      if (data.length > 0) setRestaurants(data);
     } catch (e) { console.error("Restaurant fetch failed:", e); }
   }, []);
 
@@ -261,13 +317,23 @@ export default function Dashboard() {
     } catch (e) { console.error("Briefing fetch failed:", e); }
   }, []);
 
-  const fetchSports = useCallback(async () => {
+  const fetchWeatherNarrative = useCallback(async () => {
+    const { lat, lon } = coordsRef.current;
     try {
-      const res = await fetch(CONFIG.SPORTS_API);
+      const res = await fetch(`${CONFIG.WEATHER_NARRATIVE_API}?lat=${lat}&lon=${lon}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      if (Object.keys(data).length > 0) setSports(data);
-    } catch (e) { console.error("Sports fetch failed:", e); }
+      if (data.text) setWeatherNarrative(data.text);
+    } catch (e) { console.error("Weather narrative fetch failed:", e); }
+  }, []);
+
+  const fetchStockDigest = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.STOCK_DIGEST_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setStockDigest(data.text);
+    } catch (e) { console.error("Stock digest fetch failed:", e); }
   }, []);
 
   const fetchEvents = useCallback(async () => {
@@ -279,22 +345,26 @@ export default function Dashboard() {
     } catch (e) { console.error("Events fetch failed:", e); }
   }, []);
 
-  // Initial fetch + refresh interval
+  const fetchSports = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.SPORTS_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (Object.keys(data).length > 0) setSports(data);
+    } catch (e) { console.error("Sports fetch failed:", e); }
+  }, []);
+
   useEffect(() => {
-    fetchWeather();
-    fetchStocks();
-    fetchRestaurants();
-    fetchEvents();
-    fetchBriefing();
-    fetchNews();
-    fetchSports();
+    fetchWeather(); fetchStocks(); fetchRestaurants();
+    fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
+    fetchWeatherNarrative(); fetchStockDigest();
     const iv = setInterval(() => {
-      fetchWeather();
-      fetchStocks();
+      fetchWeather(); fetchStocks(); fetchSports();
+      fetchWeatherNarrative(); fetchStockDigest();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -307,439 +377,534 @@ export default function Dashboard() {
   const busDeps = getNextScheduled(BUS_126, now, 4);
   const busReturn = getNextScheduled(BUS_126, now, 4, true);
 
-  const sectionLabel = { fontSize: 13, color: C.text2, marginBottom: 8, fontWeight: 500 };
-  const divider = { border: "none", borderTop: `1px solid ${C.border}`, margin: "0 0 20px 0" };
-  const card = { background: C.surface, borderRadius: 8, padding: 12 };
+  // Memoize sports grouping — only recomputes when league data or selection changes
+  const sportsGroups = useMemo(() => {
+    const league = sports[sportsLeague];
+    if (!league) return null;
+    const groups = {};
+    for (const t of league.teams) {
+      if (!groups[t.group]) groups[t.group] = [];
+      groups[t.group].push({ ...t, winsNum: parseInt(t.wins) || 0 });
+    }
+    for (const g of Object.values(groups)) g.sort((a, b) => b.winsNum - a.winsNum);
+    return groups;
+  }, [sports, sportsLeague]);
+
+  // Hero bar values
+  const heroPath = (() => {
+    const train = pathLive
+      ? pathTrains.toNY.find(t => t.headsign === "33rd Street")
+      : estTrains.find(t => t.headsign === "33rd Street");
+    if (!train) return { value: "—", sub: "No trains", color: "gray" };
+    const { mins, display } = pathLive
+      ? calcLiveCountdown(train, pathTrains.fetchedAt, now)
+      : { mins: train.minsAway, display: fmtCountdown(train.minsAway) };
+    const color = mins <= 3 ? "red" : mins <= 8 ? "yellow" : "green";
+    return { value: train.headsign, sub: display, color };
+  })();
+
+  const heroFerry = (() => {
+    const all = [...midFerries, ...dnFerries, ...midNJTFerries].sort((a, b) => a.minsAway - b.minsAway);
+    const f = all[0];
+    if (!f) return { value: "—", sub: "No more today", color: "gray" };
+    const color = f.minsAway <= 5 ? "red" : f.minsAway <= 15 ? "yellow" : "blue";
+    return { value: f.time, sub: `${f.minsAway} min away`, color };
+  })();
+
+
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: 20, boxSizing: "border-box" }}>
-      <style>{`
-        @media (max-width: 600px) {
-          .weather-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-          .stock-row { grid-template-columns: 28px 1fr 70px 62px !important; }
-          .stock-row .stock-spacer { display: none !important; }
-          .stock-row .stock-sparkline { display: none !important; }
-          .stock-header { grid-template-columns: 28px 1fr 70px 62px !important; }
-          .stock-header .stock-spacer { display: none !important; }
-          .stock-header .stock-sparkline { display: none !important; }
-          .ferry-grid { grid-template-columns: 1fr !important; }
-          .dashboard-grid { grid-template-columns: 1fr !important; }
-          .hero-bar { flex-wrap: wrap; gap: 8px !important; }
-          .hero-pill { flex: 1 1 40% !important; }
-        }
-      `}</style>
+    <Box bg={dark ? "var(--mantine-color-dark-8)" : "var(--mantine-color-gray-1)"} mih="100vh" p="md">
+
       {/* HEADER */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <span style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Adam's dashboard</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 14, color: C.text2, fontFamily: "monospace" }}>
+      <Group justify="space-between" mb="md">
+        <Text fw={700} size="lg">Adam's dashboard</Text>
+        <Group gap="sm">
+          <Text size="sm" c="dimmed" ff="monospace">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
-          </span>
-          <button onClick={() => { const next = !darkMode; setDarkMode(next); localStorage.setItem("theme", next ? "dark" : "light"); }}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 13 }}>
-            {darkMode ? "☀️ Light" : "🌙 Dark"}
-          </button>
-        </div>
-      </div>
+          </Text>
+          <Button
+            size="xs" variant="default"
+            onClick={() => setColorScheme(dark ? "light" : "dark")}
+          >
+            {dark ? "☀️ Light" : "🌙 Dark"}
+          </Button>
+        </Group>
+      </Group>
 
       {/* HERO BAR */}
-      {(() => {
-        const nextPath = pathLive ? pathTrains.toNY[0] : estTrains[0];
-        const elapsed = pathTrains.fetchedAt ? (now - pathTrains.fetchedAt) / 1000 : 0;
-        const pathSecs = nextPath && pathLive ? Math.max(0, nextPath.secondsAway - elapsed) : null;
-        const pathMins = pathSecs != null ? Math.floor(pathSecs / 60) : (nextPath ? nextPath.minsAway : null);
-        const pathDisplay = pathSecs != null && pathSecs < 30 ? "Arriving" : pathMins === 0 ? "< 1 min" : pathMins != null ? `${pathMins} min` : "—";
-        const pathColor = pathMins != null && pathMins <= 3 ? C.red : pathMins != null && pathMins <= 8 ? C.amber : C.green;
-
-        const allFerries = [...midFerries, ...dnFerries, ...midNJTFerries].sort((a, b) => a.minsAway - b.minsAway);
-        const nextFerry = allFerries[0];
-        const ferryMins = nextFerry ? nextFerry.minsAway : null;
-        const ferryColor = ferryMins != null && ferryMins <= 5 ? C.red : ferryMins != null && ferryMins <= 15 ? C.amber : C.blue;
-
-        const pills = [
-          { label: "Weather", value: weather ? `${weather.temp}°F` : "—", sub: weather ? (WMO_CODES[weather.code] || "Clear") : "Loading", color: C.teal },
-          { label: "PATH to NYC", value: nextPath ? nextPath.headsign : "—", sub: pathDisplay, color: pathColor },
-          { label: "Ferry", value: nextFerry ? nextFerry.time : "—", sub: ferryMins != null ? `${ferryMins} min away` : "No more today", color: ferryColor },
-          { label: now.toLocaleDateString("en-US", { weekday: "long" }), value: now.toLocaleDateString("en-US", { month: "long", day: "numeric" }), sub: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }), color: C.purple },
-        ];
-        return (
-          <div className="hero-bar" style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-            {pills.map((p, i) => (
-              <div key={i} className="hero-pill" style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", borderTop: `3px solid ${p.color}` }}>
-                <div style={{ fontSize: 11, color: C.text3, marginBottom: 4, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, lineHeight: 1.2 }}>{p.value}</div>
-                <div style={{ fontSize: 12, color: p.color, marginTop: 3, fontWeight: 500 }}>{p.sub}</div>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* TWO-COLUMN LAYOUT */}
-      <div className="dashboard-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
-      <div> {/* LEFT COLUMN — transit & weather */}
+      <SimpleGrid cols={{ base: 2, sm: 4 }} mb="md">
+        {[
+          {
+            label: "Weather",
+            value: weather ? `${weather.temp}°F` : "—",
+            sub: weather ? (WMO_CODES[weather.code] || "Clear") : "Loading...",
+            accent: "teal",
+          },
+          {
+            label: "PATH to NYC",
+            value: heroPath.value,
+            sub: heroPath.sub,
+            accent: heroPath.color,
+          },
+          {
+            label: "Ferry",
+            value: heroFerry.value,
+            sub: heroFerry.sub,
+            accent: heroFerry.color,
+          },
+          {
+            label: now.toLocaleDateString("en-US", { weekday: "long" }),
+            value: now.toLocaleDateString("en-US", { month: "long", day: "numeric" }),
+            sub: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            accent: "violet",
+          },
+        ].map((p) => (
+          <Paper
+            key={p.label}
+            withBorder p="md" radius="md"
+            style={{ borderTop: `3px solid var(--mantine-color-${p.accent}-5)` }}
+          >
+            <Text size="xs" tt="uppercase" fw={600} c="dimmed" mb={4} style={{ letterSpacing: "0.05em" }}>{p.label}</Text>
+            <Text size="lg" fw={700} lh={1.2}>{p.value}</Text>
+            <Text size="xs" fw={500} c={`${p.accent}.5`} mt={4}>{p.sub}</Text>
+          </Paper>
+        ))}
+      </SimpleGrid>
 
       {/* DAILY BRIEFING */}
       {briefing && (
-        <div style={{ background: C.surface, border: `1px solid ${C.purple}44`, borderRadius: 10, padding: "14px 18px", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <span style={{ background: C.purple + "33", color: C.purple, fontWeight: 600, fontSize: 12, padding: "3px 9px", borderRadius: 6 }}>AI</span>
-            <span style={{ fontSize: 13, fontWeight: 500, color: C.text }}>Daily Briefing</span>
-            <span style={{ fontSize: 11, color: C.text3, marginLeft: "auto" }}>{new Date(briefing.generatedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</span>
-          </div>
-          <div style={{ fontSize: 14, color: C.text2, lineHeight: 1.6 }}>{briefing.text}</div>
-        </div>
+        <Paper withBorder p="md" mb="md" radius="md">
+          <Group gap="xs" mb="xs">
+            <Badge color="violet" variant="light" size="sm" radius="sm">AI</Badge>
+            <Text size="sm" fw={500}>Daily Briefing</Text>
+            <Text size="xs" c="dimmed" ml="auto">
+              {new Date(briefing.generatedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            </Text>
+          </Group>
+          <Text size="sm" c="dimmed" lh={1.6}>{briefing.text}</Text>
+        </Paper>
       )}
 
-      {/* WEATHER */}
-      <div style={sectionLabel}>Hoboken, NJ</div>
-      <div className="weather-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10, marginBottom: 20 }}>
-        <div style={{ ...card, padding: "12px 16px" }}>
-          <div style={{ fontSize: 26, fontWeight: 600, color: C.text }}>{weather ? `${weather.temp}°F` : "..."}</div>
-          <div style={{ fontSize: 12, color: C.text2, marginTop: 2 }}>{weather ? (WMO_CODES[weather.code] || "Unknown") : "Loading..."}</div>
-          {weather?.wind != null && <div style={{ fontSize: 11, color: C.text3, marginTop: 4 }}>Wind {weather.wind} mph</div>}
-          <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>Now</div>
-        </div>
-        {(weather?.daily || [{},{},{},{}]).map((d, i) => (
-          <div key={i} style={{ ...card, textAlign: "center", padding: "10px 8px" }}>
-            <div style={{ fontSize: 12, color: C.text2, marginBottom: 4 }}>{d.day || "..."}</div>
-            <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{d.hi != null ? `${d.hi}°` : "..."}</div>
-            <div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{d.lo != null ? `${d.lo}°` : ""}</div>
-            <div style={{ fontSize: 11, color: C.blue, marginTop: 4 }}>{d.rain != null ? `${d.rain}%` : ""}</div>
-            <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{d.wind != null ? `${d.wind} mph` : ""}</div>
-          </div>
-        ))}
-      </div>
-      <hr style={divider} />
+      {/* TWO-COLUMN GRID */}
+      <Grid gutter="lg">
 
-      {/* PATH */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ background: "#2d2554", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>PATH</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Hoboken to NYC</span>
-          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, fontWeight: 500, background: pathLive ? "#14532d" : "#422006", color: pathLive ? "#4ade80" : "#fbbf24" }}>
-            {pathLive ? "live" : "estimated"}
-          </span>
-        </div>
-        {pathUpdated && pathLive && <span style={{ fontSize: 11, color: C.text3 }}>Updated {pathUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>}
-      </div>
+        {/* ── LEFT COLUMN ── */}
+        <Grid.Col span={{ base: 12, md: 6 }}>
 
-      {pathLive && (pathTrains.toNY.length > 0 || pathTrains.toNJFrom33S.length > 0) ? (
-        <div style={{ marginBottom: 16 }}>
-          {[
-            { label: "To NYC", trains: pathTrains.toNY, key: "ny" },
-            { label: "To NJ (from 33rd St)", trains: pathTrains.toNJFrom33S, key: "nj" },
-          ].map(({ label, trains, key }) =>
-            trains.length === 0 ? null : (
-              <div key={key}>
-                <div style={{ fontSize: 12, color: C.text3, marginBottom: 4, marginTop: key === "nj" ? 12 : 0 }}>{label}</div>
-                {trains.map((t, i) => {
-                  const elapsed = pathTrains.fetchedAt ? (now - pathTrains.fetchedAt) / 1000 : 0;
-                  const liveSecs = Math.max(0, t.secondsAway - elapsed);
-                  const liveMins = Math.floor(liveSecs / 60);
-                  const display = liveSecs < 30 ? "Arriving" : liveMins === 0 ? "< 1 min" : liveMins === 1 ? "1 min" : `${liveMins} min`;
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: i < trains.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                      <div style={{ width: 4, height: 30, borderRadius: 2, background: t.lineColor, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t.headsign}</div>
-                      </div>
-                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, fontWeight: 500, background: "#14532d", color: "#4ade80" }}>Live</span>
-                      <div style={{ fontSize: liveMins <= 5 ? 18 : 16, fontWeight: 600, minWidth: 56, textAlign: "right", color: liveMins <= 3 ? C.red : C.text }}>{display}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
+          {/* WEATHER */}
+          <Text size="xs" c="dimmed" fw={500} mb="xs">{locationLabel}</Text>
+          <SimpleGrid cols={{ base: 3, xs: 5 }} mb="md">
+            <Card withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
+              <Text size="xs" c="dimmed" mb={2}>Today</Text>
+              <Text size="xs" c="dimmed" mb={2}>{weather ? (WMO_CODES[weather.code] || "Clear") : ""}</Text>
+              <Text size="sm" fw={700}>{weather ? `${weather.temp}°F` : "..."}</Text>
+              <Text size="xs" c="dimmed">{weather?.lo != null ? `${weather.lo}°` : ""}</Text>
+              <Text size="xs" c="blue.5" mt={2}>{weather?.rain != null ? `${weather.rain}%` : ""}</Text>
+              <Text size="xs" c="dimmed">{weather?.wind != null ? `${weather.wind} mph` : ""}</Text>
+            </Card>
+            {(weather?.daily || [{},{},{},{}]).map((d, i) => (
+              <Card key={d.day || i} withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
+                <Text size="xs" c="dimmed" mb={2}>{d.day || "..."}</Text>
+                <Text size="xs" c="dimmed" mb={2}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</Text>
+                <Text size="sm" fw={700}>{d.hi != null ? `${d.hi}°` : "..."}</Text>
+                <Text size="xs" c="dimmed">{d.lo != null ? `${d.lo}°` : ""}</Text>
+                <Text size="xs" c="blue.5" mt={2}>{d.rain != null ? `${d.rain}%` : ""}</Text>
+                <Text size="xs" c="dimmed">{d.wind != null ? `${d.wind} mph` : ""}</Text>
+              </Card>
+            ))}
+          </SimpleGrid>
+          {weatherNarrative && (
+            <Text size="xs" c="dimmed" mb="md" fs="italic">{weatherNarrative}</Text>
           )}
-        </div>
-      ) : estTrains.map((t, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: i < estTrains.length - 1 ? `1px solid ${C.border}` : "none" }}>
-          <div style={{ width: 4, height: 30, borderRadius: 2, background: t.color }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t.headsign}</div>
-            <div style={{ fontSize: 12, color: C.text2 }}>{t.routeName}</div>
-          </div>
-          <span style={{ fontSize: 12, color: C.text3 }}>{t.timeStr}</span>
-          <div style={{ fontSize: t.minsAway <= 5 ? 18 : 16, fontWeight: 600, minWidth: 56, textAlign: "right", color: t.minsAway <= 3 ? C.red : C.text }}>~{fmtCountdown(t.minsAway)}</div>
-        </div>
-      ))}
 
-      {/* FERRY */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 12px" }}>
-        <span style={{ background: "#0c2d48", color: "#60a5fa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Ferry</span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NY Waterway</span>
-        <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
-      </div>
-      <div className="ferry-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
-        {[
-          { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
-          { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
-          { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
-        ].map(({ route, toData, fromData }, ri) => (
-          <div key={ri} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px" }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: C.text, marginBottom: 10 }}>{route.name}</div>
-            <div style={{ fontSize: 11, color: C.text3, marginBottom: 4 }}>→ NYC · from {route.from} · ~{route.tripTime} min</div>
-            {toData.length === 0 ? <div style={{ fontSize: 13, color: C.text2, padding: "4px 0 8px" }}>No more today</div> : toData.map((f, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < toData.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.text2 }}>{f.time}</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: f.minsAway <= 10 ? C.blue : C.text }}>{fmtCountdown(f.minsAway)}</span>
-              </div>
-            ))}
-            <div style={{ fontSize: 11, color: C.text3, margin: "10px 0 4px" }}>→ Hoboken · from {route.to?.split("→")[0].trim()}</div>
-            {fromData.length === 0 ? <div style={{ fontSize: 13, color: C.text2, padding: "4px 0" }}>No more today</div> : fromData.map((f, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < fromData.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.text2 }}>{f.time}</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: f.minsAway <= 10 ? C.blue : C.text }}>{fmtCountdown(f.minsAway)}</span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+          <Divider mb="md" />
 
-      {/* BUS 126 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ background: "#431407", color: "#fb923c", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>126</span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NJ Transit Bus to 42nd St</span>
-        <span style={{ fontSize: 12, color: C.text3 }}>{isWeekend ? "weekend" : "weekday"}</span>
-      </div>
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
-          <div>
-            <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>→ NYC · from {BUS_126.from} · ~{BUS_126.tripTime} min</div>
-            {busDeps.map((b, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < busDeps.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.text2 }}>{b.time}</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: b.minsAway <= 10 ? C.coral : C.text }}>{fmtCountdown(b.minsAway)}</span>
-              </div>
-            ))}
-          </div>
-          <div>
-            <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>→ Hoboken · from {BUS_126.returnFrom}</div>
-            {busReturn.map((b, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: i < busReturn.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.text2 }}>{b.time}</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: b.minsAway <= 10 ? C.coral : C.text }}>{fmtCountdown(b.minsAway)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+          {/* PATH */}
+          <SectionHeader
+            badge="PATH" badgeColor="violet"
+            title="Hoboken to NYC"
+            right={
+              <Group gap="xs">
+                <Badge size="xs" color={pathLive ? "green" : "yellow"} variant="light">
+                  {pathLive ? "live" : "estimated"}
+                </Badge>
+                {pathUpdated && pathLive && (
+                  <Text size="xs" c="dimmed">
+                    {pathUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                  </Text>
+                )}
+              </Group>
+            }
+          />
 
-      </div> {/* END LEFT COLUMN */}
-      <div> {/* RIGHT COLUMN — markets, food, events, sports, news */}
-
-      {/* STOCKS */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-        <div style={sectionLabel}>Top 100 Stocks</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: C.text3 }}>Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</span>
-          <button onClick={() => setStockPage(p => Math.max(0, p - 1))} disabled={stockPage === 0}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>‹</button>
-          <button onClick={() => setStockPage(p => Math.min(Math.ceil(stocks.length / 10) - 1, p + 1))} disabled={stockPage >= Math.ceil(stocks.length / 10) - 1}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>›</button>
-        </div>
-      </div>
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
-        <div className="stock-header" style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "6px 14px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text3, fontWeight: 500 }}>
-          <span>#</span><span>Symbol</span><span className="stock-spacer"></span><span style={{ textAlign: "right" }}>Price</span><span style={{ textAlign: "right" }}>Change</span><span className="stock-sparkline" style={{ textAlign: "right" }}>5d</span>
-        </div>
-        {stocks.length === 0
-          ? <div style={{ padding: "20px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
-          : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
-            const pos = s.pct >= 0;
-            return (
-              <div key={s.symbol} className="stock-row" style={{ display: "grid", gridTemplateColumns: "32px 64px 1fr 90px 100px 80px", gap: "0 12px", padding: "7px 14px", borderBottom: `1px solid ${C.border}`, alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: C.text3 }}>{s.rank}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.symbol}</span>
-                <span className="stock-spacer"></span>
-                <span style={{ fontSize: 13, fontWeight: 500, color: C.text, textAlign: "right" }}>${s.price.toFixed(2)}</span>
-                <span style={{ fontSize: 12, color: pos ? C.green : C.red, textAlign: "right" }}>
-                  {pos ? "+" : ""}{s.pct.toFixed(2)}%
-                </span>
-                <div className="stock-sparkline" style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <Sparkline data={s.sparkline} positive={pos} />
-                </div>
-              </div>
-            );
-          })
-        }
-      </div>
-      <hr style={divider} />
-
-      {/* RESTAURANT OF THE DAY */}
-      {restaurants.length > 0 && (() => {
-        const r = restaurants[restaurantIdx];
-        return (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ background: "#2d1a0e", color: C.coral, fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Eat</span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Restaurant of the Day</span>
-              </div>
-              <button onClick={() => setRestaurantIdx(i => (i + 1) % restaurants.length)}
-                style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 12 }}>Next →</button>
-            </div>
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", display: "flex" }}>
-              {r.photo && <img src={r.photo} alt={r.name} style={{ width: 120, height: 100, objectFit: "cover", flexShrink: 0 }} />}
-              <div style={{ padding: "12px 16px", flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{r.name}</span>
-                  <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 99, background: C.surface, border: `1px solid ${C.border}`, color: C.text3 }}>{r.area}</span>
-                </div>
-                <div style={{ fontSize: 12, color: C.text3, marginBottom: 6 }}>{r.category}{r.price ? " · " + "$".repeat(r.price) : ""}{r.rating ? ` · ★ ${r.rating.toFixed(1)}` : ""}</div>
-                <div style={{ fontSize: 12, color: C.text2 }}>{r.address}</div>
-                {r.website && <a href={r.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.blue, marginTop: 4, display: "inline-block" }}>Website →</a>}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-      <hr style={divider} />
-
-      {/* NYC EVENTS */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Events</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>NYC This Week</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: C.text3 }}>Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</span>
-          <button onClick={() => setEventPage(p => Math.max(0, p - 1))} disabled={eventPage === 0}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>‹</button>
-          <button onClick={() => setEventPage(p => Math.min(Math.ceil(events.length / 10) - 1, p + 1))} disabled={eventPage >= Math.ceil(events.length / 10) - 1}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text2, borderRadius: 4, padding: "2px 10px", cursor: "pointer", fontSize: 13 }}>›</button>
-        </div>
-      </div>
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
-        {events.length === 0
-          ? <div style={{ padding: "16px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
-          : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
-            const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
-            const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-            return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? `1px solid ${C.border}` : "none" }}>
-                {e.image && <img src={e.image} alt="" style={{ width: 56, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</div>
-                  <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</div>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, color: C.text2 }}>{dateStr}</div>
-                  <div style={{ fontSize: 11, color: C.text3 }}>{timeStr}</div>
-                  {e.priceMin && <div style={{ fontSize: 11, color: C.green }}>from ${Math.round(e.priceMin)}</div>}
-                </div>
-                {e.url && <a href={e.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue, flexShrink: 0 }}>→</a>}
-              </div>
-            );
-          })
-        }
-      </div>
-      <hr style={divider} />
-
-      {/* SPORTS */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ background: "#1a0a2e", color: "#a78bfa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>Sports</span>
-          <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Standings & News</span>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {["nba","nfl","mlb"].map(l => (
-            <button key={l} onClick={() => setSportsLeague(l)}
-              style={{ background: sportsLeague === l ? C.purple : C.surface, border: `1px solid ${sportsLeague === l ? C.purple : C.border}`, color: sportsLeague === l ? "#fff" : C.text2, borderRadius: 5, padding: "3px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, textTransform: "uppercase" }}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      {(() => {
-        const league = sports[sportsLeague];
-        if (!league) return <div style={{ padding: "16px 0", color: C.text3, fontSize: 13 }}>Loading...</div>;
-        const groups = {};
-        for (const t of league.teams) {
-          if (!groups[t.group]) groups[t.group] = [];
-          groups[t.group].push(t);
-        }
-        for (const g of Object.values(groups)) g.sort((a, b) => parseInt(b.wins) - parseInt(a.wins));
-        return (
-          <div style={{ marginBottom: 20 }}>
-            {/* Standings */}
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 40px 40px 60px 50px", gap: "0 8px", padding: "6px 14px", borderBottom: `1px solid ${C.border}`, fontSize: 11, color: C.text3, fontWeight: 500 }}>
-                <span>Team</span><span style={{ textAlign: "center" }}>W</span><span style={{ textAlign: "center" }}>L</span><span style={{ textAlign: "center" }}>PCT</span><span style={{ textAlign: "center" }}>GB</span>
-              </div>
-              {Object.entries(groups).map(([grp, teams]) => (
-                <div key={grp}>
-                  {grp && <div style={{ fontSize: 11, color: C.text3, fontWeight: 600, padding: "5px 14px 2px", background: C.surface, borderBottom: `1px solid ${C.border}` }}>{grp}</div>}
-                  {teams.map((t, i) => (
-                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 40px 40px 60px 50px", gap: "0 8px", padding: "7px 14px", borderBottom: i < teams.length - 1 || Object.keys(groups).indexOf(grp) < Object.keys(groups).length - 1 ? `1px solid ${C.border}` : "none", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        {t.logo && <img src={t.logo} alt={t.abbr} style={{ width: 20, height: 20, objectFit: "contain" }} />}
-                        <span style={{ fontSize: 13, color: C.text }}>{t.name}</span>
-                      </div>
-                      <span style={{ fontSize: 13, color: C.text, textAlign: "center" }}>{t.wins}</span>
-                      <span style={{ fontSize: 13, color: C.text, textAlign: "center" }}>{t.losses}</span>
-                      <span style={{ fontSize: 12, color: C.text2, textAlign: "center" }}>{t.pct}</span>
-                      <span style={{ fontSize: 12, color: C.text3, textAlign: "center" }}>{t.gb}</span>
-                    </div>
-                  ))}
-                </div>
+          {pathLive && (pathTrains.toNY.length > 0 || pathTrains.toNJFrom33S.length > 0) ? (
+            <Box mb="md">
+              {[
+                { label: "To NYC", trains: pathTrains.toNY, key: "ny" },
+                { label: "To NJ (from 33rd St)", trains: pathTrains.toNJFrom33S, key: "nj" },
+              ].map(({ label, trains, key }) => trains.length === 0 ? null : (
+                <Box key={key} mb="xs">
+                  <Text size="xs" c="dimmed" mb={4} mt={key === "nj" ? "sm" : 0}>{label}</Text>
+                  {trains.map((t, i) => {
+                    const { mins, display } = calcLiveCountdown(t, pathTrains.fetchedAt, now);
+                    return (
+                      <TransitRow
+                        key={i}
+                        color={t.lineColor}
+                        headsign={t.headsign}
+                        badge={<Badge size="xs" color="green" variant="light">Live</Badge>}
+                        right={
+                          <Text fw={700} size={mins <= 5 ? "lg" : "sm"} c={mins <= 3 ? "red" : undefined}>
+                            {display}
+                          </Text>
+                        }
+                        isLast={i === trains.length - 1}
+                      />
+                    );
+                  })}
+                </Box>
               ))}
-            </div>
-            {/* News */}
-            {league.news.length > 0 && (
-              <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
-                {league.news.map((n, i) => (
-                  <div key={i} style={{ padding: "9px 14px", borderBottom: i < league.news.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                    <a href={n.link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: C.text, textDecoration: "none", lineHeight: 1.4 }}
-                      onMouseEnter={e => e.target.style.color = C.blue}
-                      onMouseLeave={e => e.target.style.color = C.text}>
-                      {n.headline}
-                    </a>
-                    {n.date && <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-      <hr style={divider} />
+            </Box>
+          ) : (
+            <Box mb="md">
+              {estTrains.map((t, i) => (
+                <TransitRow
+                  key={i}
+                  color={t.color}
+                  headsign={t.headsign}
+                  subtitle={t.routeName}
+                  right={
+                    <Group gap="xs">
+                      <Text size="xs" c="dimmed">{t.timeStr}</Text>
+                      <Text fw={700} size={t.minsAway <= 5 ? "lg" : "sm"} c={t.minsAway <= 3 ? "red" : undefined}>
+                        ~{fmtCountdown(t.minsAway)}
+                      </Text>
+                    </Group>
+                  }
+                  isLast={i === estTrains.length - 1}
+                />
+              ))}
+            </Box>
+          )}
 
-      {/* NEWS */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ background: "#0a1628", color: "#60a5fa", fontWeight: 600, fontSize: 12, padding: "4px 10px", borderRadius: 6 }}>News</span>
-        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>Top Headlines</span>
-      </div>
-      <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 20 }}>
-        {news.length === 0
-          ? <div style={{ padding: "16px 14px", color: C.text3, fontSize: 13 }}>Loading...</div>
-          : news.slice(0, 15).map((item, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "9px 14px", borderBottom: i < 14 ? `1px solid ${C.border}` : "none" }}>
-              <span style={{ fontSize: 10, color: C.text3, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4, padding: "1px 6px", flexShrink: 0 }}>{item.source}</span>
-              <a href={item.link} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: C.text, textDecoration: "none", lineHeight: 1.4, flex: 1 }}
-                onMouseEnter={e => e.target.style.color = C.blue}
-                onMouseLeave={e => e.target.style.color = C.text}>
-                {item.title}
-              </a>
-              {item.pubDate && <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>
-                {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-              </span>}
-            </div>
-          ))
-        }
-      </div>
-      </div> {/* END RIGHT COLUMN */}
-      </div> {/* END DASHBOARD GRID */}
+          <Divider mb="md" />
+
+          {/* FERRY */}
+          <SectionHeader
+            badge="Ferry" badgeColor="blue"
+            title="NY Waterway"
+            right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
+          />
+          <SimpleGrid cols={{ base: 1, xs: 3 }} mb="md">
+            {[
+              { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
+              { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
+              { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
+            ].map(({ route, toData, fromData }, ri) => (
+              <Card key={ri} withBorder p="sm" radius="md">
+                <Text size="sm" fw={500} mb={4}>{route.name}</Text>
+                <Text size="xs" c="dimmed" mb={2}>→ NYC · {route.from} · ~{route.tripTime} min</Text>
+                {toData.length === 0
+                  ? <Text size="xs" c="dimmed" py={2}>No more today</Text>
+                  : toData.slice(0, 3).map((f, i, arr) => (
+                    <Group key={i} justify="space-between" py={2} style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                      <Text size="xs" c="dimmed">{f.time}</Text>
+                      <Text size="xs" fw={500} c={f.minsAway <= 10 ? "blue" : undefined}>{fmtCountdown(f.minsAway)}</Text>
+                    </Group>
+                  ))
+                }
+                <Text size="xs" c="dimmed" mt="xs" mb={2}>→ Hoboken · {route.to}</Text>
+                {fromData.length === 0
+                  ? <Text size="xs" c="dimmed" py={2}>No more today</Text>
+                  : fromData.slice(0, 3).map((f, i, arr) => (
+                    <Group key={i} justify="space-between" py={2} style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                      <Text size="xs" c="dimmed">{f.time}</Text>
+                      <Text size="xs" fw={500} c={f.minsAway <= 10 ? "blue" : undefined}>{fmtCountdown(f.minsAway)}</Text>
+                    </Group>
+                  ))
+                }
+              </Card>
+            ))}
+          </SimpleGrid>
+
+          <Divider mb="md" />
+
+          {/* BUS 126 */}
+          <SectionHeader
+            badge="126" badgeColor="orange"
+            title="NJ Transit Bus to 42nd St"
+            right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
+          />
+          <Card withBorder p="sm" radius="md" mb="md">
+            <Grid>
+              <Grid.Col span={6}>
+                <Text size="xs" c="dimmed" mb="xs">→ NYC · from {BUS_126.from} · ~{BUS_126.tripTime} min</Text>
+                {busDeps.map((b, i) => (
+                  <Group key={i} justify="space-between" py={5} style={{ borderBottom: i < busDeps.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                    <Text size="sm" c="dimmed">{b.time}</Text>
+                    <Text size="sm" fw={500} c={b.minsAway <= 10 ? "orange" : undefined}>{fmtCountdown(b.minsAway)}</Text>
+                  </Group>
+                ))}
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="xs" c="dimmed" mb="xs">→ Hoboken · from {BUS_126.returnFrom}</Text>
+                {busReturn.map((b, i) => (
+                  <Group key={i} justify="space-between" py={5} style={{ borderBottom: i < busReturn.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                    <Text size="sm" c="dimmed">{b.time}</Text>
+                    <Text size="sm" fw={500} c={b.minsAway <= 10 ? "orange" : undefined}>{fmtCountdown(b.minsAway)}</Text>
+                  </Group>
+                ))}
+              </Grid.Col>
+            </Grid>
+          </Card>
+
+        </Grid.Col>
+
+        {/* ── RIGHT COLUMN ── */}
+        <Grid.Col span={{ base: 12, md: 6 }}>
+
+          {/* STOCKS */}
+          {stockDigest && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>
+          )}
+          <Group justify="space-between" mb="xs">
+            <Text size="xs" c="dimmed" fw={500}>Top 100 Stocks</Text>
+            <Group gap="xs">
+              <Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text>
+              <ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon>
+              <ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon>
+            </Group>
+          </Group>
+          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+            <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={32} style={{ fontSize: 11 }}>#</Table.Th>
+                  <Table.Th style={{ fontSize: 11 }}>Symbol</Table.Th>
+                  <Table.Th style={{ fontSize: 11, textAlign: "right" }}>Price</Table.Th>
+                  <Table.Th style={{ fontSize: 11, textAlign: "right" }}>Change</Table.Th>
+                  <Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {stocks.length === 0
+                  ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
+                  : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
+                    const pos = s.pct >= 0;
+                    return (
+                      <Table.Tr key={s.symbol}>
+                        <Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td>
+                        <Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text>
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: "right" }} visibleFrom="xs">
+                          <Sparkline data={s.sparkline} positive={pos} />
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })
+                }
+              </Table.Tbody>
+            </Table>
+          </Card>
+
+          <Divider mb="md" />
+
+          {/* RESTAURANT */}
+          {(() => {
+            const r = restaurants[restaurantIdx];
+            if (!r) return null;
+            return (
+              <Box mb="md">
+                <SectionHeader
+                  badge="Eat" badgeColor="orange"
+                  title="Restaurant of the Day"
+                  right={
+                    <Button size="xs" variant="default" onClick={() => setRestaurantIdx(i => (i + 1) % restaurants.length)}>
+                      Next →
+                    </Button>
+                  }
+                />
+                <Card withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
+                  <Group wrap="nowrap" align="stretch" gap={0}>
+                    {r.photo && <img src={r.photo} alt={r.name} style={{ width: 110, objectFit: "cover", flexShrink: 0 }} />}
+                    <Box p="sm" style={{ flex: 1 }}>
+                      <Group gap="xs" mb={4}>
+                        <Text size="sm" fw={600}>{r.name}</Text>
+                        <Badge size="xs" variant="outline">{r.area}</Badge>
+                      </Group>
+                      <Text size="xs" c="dimmed" mb={4}>
+                        {r.category}{r.price ? " · " + "$".repeat(r.price) : ""}{r.rating ? ` · ★ ${r.rating.toFixed(1)}` : ""}
+                      </Text>
+                      <Text size="xs" c="dimmed">{r.address}</Text>
+                      {r.website && <Anchor href={r.website} target="_blank" size="xs" mt={4} display="block">Website →</Anchor>}
+                    </Box>
+                  </Group>
+                </Card>
+              </Box>
+            );
+          })()}
+
+          <Divider mb="md" />
+
+          {/* EVENTS */}
+          <SectionHeader
+            badge="Events" badgeColor="violet"
+            title="NYC This Week"
+            right={
+              <Group gap="xs">
+                <Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text>
+                <ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon>
+                <ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon>
+              </Group>
+            }
+          />
+          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+            {events.length === 0
+              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
+              : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
+                const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
+                const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+                return (
+                  <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                    {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" fw={500} truncate>{e.name}</Text>
+                      <Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text>
+                    </Box>
+                    <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}>
+                      <Text size="xs" c="dimmed">{dateStr}</Text>
+                      <Text size="xs" c="dimmed">{timeStr}</Text>
+                      {e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}
+                    </Stack>
+                    {e.url && <Anchor href={e.url} target="_blank" size="xs" c="blue">→</Anchor>}
+                  </Group>
+                );
+              })
+            }
+          </Card>
+
+          <Divider mb="md" />
+
+          {/* SPORTS */}
+          <SectionHeader
+            badge="Sports" badgeColor="violet"
+            title="Standings & News"
+            right={
+              <SegmentedControl
+                size="xs"
+                value={sportsLeague}
+                onChange={setSportsLeague}
+                data={[
+                  { value: "nba", label: "NBA" },
+                  { value: "nfl", label: "NFL" },
+                  { value: "mlb", label: "MLB" },
+                ]}
+              />
+            }
+          />
+          {!sportsGroups
+            ? <Text size="sm" c="dimmed" mb="md">Loading...</Text>
+            : (
+              <Box mb="md">
+                <Card withBorder p={0} radius="md" mb="sm" style={{ overflow: "hidden" }}>
+                  <Table verticalSpacing={6} horizontalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th style={{ fontSize: 11 }}>Team</Table.Th>
+                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>W</Table.Th>
+                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>L</Table.Th>
+                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 56 }}>PCT</Table.Th>
+                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 46 }}>GB</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {Object.entries(sportsGroups).map(([grp, teams], gi, all) => [
+                        grp && (
+                          <Table.Tr key={`grp-${grp}`}>
+                            <Table.Td colSpan={5} style={{ background: "var(--mantine-color-default-hover)" }}>
+                              <Text size="xs" fw={600} c="dimmed">{grp}</Text>
+                            </Table.Td>
+                          </Table.Tr>
+                        ),
+                        ...teams.map((t, i) => (
+                          <Table.Tr key={t.abbr || `${grp}-${i}`}>
+                            <Table.Td>
+                              <Group gap="xs">
+                                {t.logo && <img src={t.logo} alt={t.abbr} style={{ width: 18, height: 18, objectFit: "contain" }} />}
+                                <Text size="sm">{t.name}</Text>
+                              </Group>
+                            </Table.Td>
+                            <Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.wins}</Text></Table.Td>
+                            <Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.losses}</Text></Table.Td>
+                            <Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.pct}</Text></Table.Td>
+                            <Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.gb}</Text></Table.Td>
+                          </Table.Tr>
+                        )),
+                      ])}
+                    </Table.Tbody>
+                  </Table>
+                </Card>
+                {sports[sportsLeague]?.news?.length > 0 && (
+                  <Card withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
+                    {sports[sportsLeague].news.map((n, i) => (
+                      <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                        <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never"
+                          style={{ display: "block", lineHeight: 1.4 }}
+                          onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
+                          onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
+                        >
+                          {n.headline}
+                        </Anchor>
+                        {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
+                      </Box>
+                    ))}
+                  </Card>
+                )}
+              </Box>
+            )
+          }
+
+          <Divider mb="md" />
+
+          {/* NEWS */}
+          <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" />
+          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+            {news.length === 0
+              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
+              : news.slice(0, 15).map((item, i) => (
+                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < 14 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                  <Badge size="xs" variant="outline" color="gray" style={{ flexShrink: 0 }}>{item.source}</Badge>
+                  <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never"
+                    style={{ flex: 1, lineHeight: 1.4 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
+                    onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
+                  >
+                    {item.title}
+                  </Anchor>
+                  {item.pubDate && (
+                    <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                      {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                  )}
+                </Group>
+              ))
+            }
+          </Card>
+
+        </Grid.Col>
+      </Grid>
 
       {/* FOOTER */}
-      <div style={{ fontSize: 11, color: C.text3, display: "flex", justifyContent: "space-between" }}>
-        <span>
+      <Group justify="space-between" mt="md">
+        <Text size="xs" c="dimmed">
           PATH: {pathLive ? "live 20s (PANYNJ)" : "schedule est."} · Weather: live 5m · Stocks: top 100, live 5m · Transit: schedule
-        </span>
-        <span>Refreshed {refreshCount}x</span>
-      </div>
-    </div>
+        </Text>
+        <Text size="xs" c="dimmed">Refreshed {refreshCount}x</Text>
+      </Group>
+    </Box>
   );
 }

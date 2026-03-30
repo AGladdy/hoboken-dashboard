@@ -1,0 +1,9 @@
+html,
+body {
+  background-color: var(--mantine-color-dark-8);
+}
+
+html[data-mantine-color-scheme='light'],
+html[data-mantine-color-scheme='light'] body {
+  background-color: var(--mantine-color-gray-1);
+}

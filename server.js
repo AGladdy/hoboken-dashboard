@@ -122,7 +122,6 @@ const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;
 const RESTAURANT_LOCATIONS = [
   { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
   { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
-  { label: "Brooklyn", ll: "40.6892,-73.9442", radius: 2000 },
 ];
 
 let cachedRestaurants = null;
@@ -272,6 +271,84 @@ Write a short, upbeat ${timePeriod} briefing in 3-4 sentences. For morning: cove
   }
 });
 
+let cachedWeatherNarrative = null;
+let lastWeatherNarrativeFetch = 0;
+
+app.get("/api/weather-narrative", async (req, res) => {
+  const now = Date.now();
+  if (cachedWeatherNarrative && now - lastWeatherNarrativeFetch < 1800000) return res.json(cachedWeatherNarrative);
+
+  try {
+    const { lat = 40.744, lon = -74.032 } = req.query;
+    const weatherRes = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m,apparent_temperature&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=2`
+    );
+    const w = await weatherRes.json();
+    const cur = w.current;
+    const today = { hi: w.daily?.temperature_2m_max?.[0], lo: w.daily?.temperature_2m_min?.[0], rain: w.daily?.precipitation_probability_max?.[0], code: w.daily?.weathercode?.[0] };
+    const tomorrow = { hi: w.daily?.temperature_2m_max?.[1], lo: w.daily?.temperature_2m_min?.[1], rain: w.daily?.precipitation_probability_max?.[1] };
+
+    const prompt = `You are a concise weather assistant. Write a single, punchy 1-2 sentence weather narrative for right now. Focus on what matters: how it feels outside, whether to grab an umbrella, and any notable condition. Be direct and conversational — no fluff.
+
+Current: ${cur.temperature_2m}°F, feels like ${cur.apparent_temperature}°F, wind ${cur.windspeed_10m} mph
+Today: high ${today.hi}°F / low ${today.lo}°F, ${today.rain}% rain chance
+Tomorrow: high ${tomorrow.hi}°F / low ${tomorrow.lo}°F, ${tomorrow.rain}% rain chance
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedWeatherNarrative = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastWeatherNarrativeFetch = now;
+    res.json(cachedWeatherNarrative);
+  } catch (e) {
+    console.error("Weather narrative failed:", e.message);
+    res.json(cachedWeatherNarrative || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+let cachedStockDigest = null;
+let lastStockDigestFetch = 0;
+
+app.get("/api/stock-digest", async (req, res) => {
+  const now = Date.now();
+  if (cachedStockDigest && now - lastStockDigestFetch < 1800000) return res.json(cachedStockDigest);
+
+  const stocks = cachedStocks;
+  if (!stocks || stocks.length === 0) return res.json({ text: "", generatedAt: new Date().toISOString() });
+
+  try {
+    const sorted = [...stocks].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    const topMovers = sorted.slice(0, 8).map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(1)}%`).join(", ");
+    const gainers = stocks.filter(s => s.pct > 0).length;
+    const losers = stocks.filter(s => s.pct < 0).length;
+
+    const prompt = `You are a terse market analyst. Write a single 1-2 sentence stock digest covering today's top movers and overall market tone. Be specific and punchy — name the biggest mover and say why if it's obvious from the move size.
+
+Top movers (by % change): ${topMovers}
+Breadth: ${gainers} gainers, ${losers} decliners out of ${stocks.length} tracked
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedStockDigest = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastStockDigestFetch = now;
+    res.json(cachedStockDigest);
+  } catch (e) {
+    console.error("Stock digest failed:", e.message);
+    res.json(cachedStockDigest || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
 app.get("/api/path/all", async (req, res) => {
   const data = await fetchPathData();
   res.json(data);
@@ -334,8 +411,7 @@ app.get("/api/sports", async (req, res) => {
   const now = Date.now();
   if (cachedSports && now - lastSportsFetch < 1800000) return res.json(cachedSports);
 
-  const result = {};
-  for (const { key, sport, league, label } of SPORTS) {
+  const fetchLeague = async ({ key, sport, league, label }) => {
     try {
       const base = `https://site.api.espn.com/apis/v2/sports/${sport}/${league}`;
       const [standRes, newsRes] = await Promise.all([
@@ -345,7 +421,6 @@ app.get("/api/sports", async (req, res) => {
       const standData = await standRes.json();
       const newsData = await newsRes.json();
 
-      // flatten all teams from all groups/divisions
       const teams = [];
       for (const group of (standData.children || [])) {
         for (const div of (group.children || group.standings ? [group] : [])) {
@@ -372,12 +447,15 @@ app.get("/api/sports", async (req, res) => {
         date: a.published,
       }));
 
-      result[key] = { label, teams, news };
+      return [key, { label, teams, news }];
     } catch (e) {
       console.error(`Sports fetch failed for ${key}:`, e.message);
-      result[key] = { label, teams: [], news: [] };
+      return [key, { label, teams: [], news: [] }];
     }
-  }
+  };
+
+  const entries = await Promise.all(SPORTS.map(fetchLeague));
+  const result = Object.fromEntries(entries);
 
   if (Object.values(result).some(r => r.teams.length > 0)) {
     cachedSports = result;

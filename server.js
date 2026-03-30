@@ -48,7 +48,11 @@ app.get("/api/path/hoboken", async (req, res) => {
   const toNY = parse(hob.destinations?.find(d => d.label === "ToNY")?.messages);
   const toNJ = parse(hob.destinations?.find(d => d.label === "ToNJ")?.messages);
 
-  res.json({ timestamp: new Date().toISOString(), dataFetchedAt: lastFetch, station: "Hoboken", toNY, toNJ });
+  // 33rd St has live ToNJ data that HOB lacks
+  const s33 = (data.results || []).find(s => s.consideredStation === "33S");
+  const toNJFrom33S = parse(s33?.destinations?.find(d => d.label === "ToNJ")?.messages);
+
+  res.json({ timestamp: new Date().toISOString(), dataFetchedAt: lastFetch, station: "Hoboken", toNY, toNJ, toNJFrom33S });
 });
 
 const TOP_100 = [

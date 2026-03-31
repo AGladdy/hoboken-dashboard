@@ -821,12 +821,12 @@ async function getStravaAccessToken() {
 
 app.get("/api/strava", async (req, res) => {
   const now = Date.now();
-  if (cachedStrava && now - lastStravaFetch < 900000) return res.json(cachedStrava);
+  if (cachedStrava && now - lastStravaFetch < 300000) return res.json(cachedStrava);
 
   try {
     const token = await getStravaAccessToken();
-    const after = Math.floor((now - 28 * 24 * 60 * 60 * 1000) / 1000);
-    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=20`, {
+    const after = Math.floor((now - 60 * 24 * 60 * 60 * 1000) / 1000);
+    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=60`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const activities = await r.json();

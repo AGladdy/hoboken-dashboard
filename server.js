@@ -5,6 +5,7 @@ import { XMLParser } from "fast-xml-parser";
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const PANYNJ_API = "https://www.panynj.gov/bin/portauthority/ridepath.json";
 
@@ -646,6 +647,128 @@ Plain text only, no markdown.`;
   } catch (e) {
     console.error("News digest failed:", e.message);
     res.json(cachedNewsDigest || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+let cachedDayPlan = null;
+let lastDayPlanPeriod = null;
+
+app.get("/api/day-plan", async (req, res) => {
+  const period = `${new Date().toDateString()}-${getTimePeriod()}`;
+  if (cachedDayPlan && lastDayPlanPeriod === period) return res.json(cachedDayPlan);
+
+  try {
+    const [pathData, weatherRes] = await Promise.all([
+      fetchPathData().catch(() => ({ results: [] })),
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=1").then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
+    const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
+    const nextTrain = toNYMsgs[0]
+      ? `${toNYMsgs[0].headSign} in ${Math.round(parseInt(toNYMsgs[0].secondsToArrival, 10) / 60)} min`
+      : "no PATH data";
+
+    const temp = weatherRes?.current?.temperature_2m;
+    const hiTemp = weatherRes?.daily?.temperature_2m_max?.[0];
+    const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const todayEvents = (cachedEvents || [])
+      .filter(e => e.date === todayStr)
+      .slice(0, 5)
+      .map(e => `${e.name}${e.time ? " at " + e.time : ""}${e.venue ? " @ " + e.venue : ""}`);
+
+    const topRestaurants = (cachedRestaurants || [])
+      .filter(r => r.rating)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 3)
+      .map(r => `${r.name} (${r.category}, ${r.area}${r.rating ? ", ★" + r.rating.toFixed(1) : ""})`);
+
+    const prompt = `You are a friendly life assistant for someone in Hoboken, NJ. Based on the data below, suggest a fun, practical plan for today in 2-3 sentences. Include a specific transit option, a meal or activity suggestion, and something to look forward to. Be warm and specific.
+
+Current weather: ${temp != null ? temp + "°F" : "unknown"}, high ${hiTemp != null ? hiTemp + "°F" : "unknown"} / low ${loTemp != null ? loTemp + "°F" : "unknown"}
+Next PATH train: ${nextTrain}
+Top events today: ${todayEvents.length > 0 ? todayEvents.join("; ") : "none found"}
+Top restaurant picks: ${topRestaurants.length > 0 ? topRestaurants.join("; ") : "none available"}
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 120,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedDayPlan = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastDayPlanPeriod = period;
+    res.json(cachedDayPlan);
+  } catch (e) {
+    console.error("Day plan failed:", e.message);
+    res.json(cachedDayPlan || { text: "", generatedAt: new Date().toISOString() });
+  }
+});
+
+app.post("/api/ask", async (req, res) => {
+  const { query } = req.body || {};
+  if (!query || !query.trim()) return res.status(400).json({ error: "query required" });
+
+  try {
+    const [pathData, weatherRes] = await Promise.all([
+      fetchPathData().catch(() => ({ results: [] })),
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=1").then(r => r.json()).catch(() => ({})),
+    ]);
+
+    const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
+    const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
+    const nextTrain = toNYMsgs[0]
+      ? `${toNYMsgs[0].headSign} in ${Math.round(parseInt(toNYMsgs[0].secondsToArrival, 10) / 60)} min`
+      : "no PATH data";
+
+    const temp = weatherRes?.current?.temperature_2m;
+    const hiTemp = weatherRes?.daily?.temperature_2m_max?.[0];
+    const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
+    const condCode = weatherRes?.current?.weathercode;
+
+    const topStocks = (cachedStocks || [])
+      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
+      .slice(0, 5)
+      .map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(1)}%`)
+      .join(", ");
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const todayEvents = (cachedEvents || [])
+      .filter(e => e.date === todayStr)
+      .slice(0, 3)
+      .map(e => `${e.name}${e.time ? " at " + e.time : ""}`);
+
+    const topRestaurants = (cachedRestaurants || [])
+      .filter(r => r.rating)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 3)
+      .map(r => `${r.name} (${r.category})`);
+
+    const prompt = `You are a personal assistant for someone in Hoboken, NJ. Answer their question using the real-time data below. Be concise and direct — 1-3 sentences max. If the data doesn't have enough info to answer, say so briefly.
+
+Current data:
+- Weather: ${temp != null ? temp + "°F" : "unknown"}, high ${hiTemp != null ? hiTemp + "°F" : "unknown"} / low ${loTemp != null ? loTemp + "°F" : "unknown"}${condCode != null ? ", code " + condCode : ""}
+- Next PATH to NYC: ${nextTrain}
+- Top stock movers: ${topStocks || "no data"}
+- Today's events: ${todayEvents.length > 0 ? todayEvents.join("; ") : "none found"}
+- Restaurant picks: ${topRestaurants.length > 0 ? topRestaurants.join("; ") : "none available"}
+
+User question: ${query}`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 120,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    res.json({ answer: message.content[0].text.trim() });
+  } catch (e) {
+    console.error("Ask failed:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

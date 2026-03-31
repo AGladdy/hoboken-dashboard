@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
   Button, Anchor, Table, Divider, SegmentedControl, ActionIcon,
+  TextInput,
   useMantineColorScheme, useComputedColorScheme,
 } from "@mantine/core";
 
@@ -19,6 +20,8 @@ const CONFIG = {
   SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
   EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
   NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
+  DAY_PLAN_API: "https://hoboken-dashboard-production.up.railway.app/api/day-plan",
+  ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
 };
@@ -154,6 +157,15 @@ function Sparkline({ data, positive }) {
   );
 }
 
+// ========== SECTION CARD ==========
+function SectionCard({ children, mb = "md" }) {
+  return (
+    <Card withBorder p={0} radius="md" mb={mb} style={{ overflow: "hidden" }}>
+      {children}
+    </Card>
+  );
+}
+
 // ========== SECTION HEADER ==========
 function SectionHeader({ badge, badgeColor = "violet", title, right }) {
   return (
@@ -217,6 +229,10 @@ export default function Dashboard() {
   const [sportsRecap, setSportsRecap] = useState(null);
   const [eventPicks, setEventPicks] = useState(null);
   const [newsDigest, setNewsDigest] = useState(null);
+  const [dayPlan, setDayPlan] = useState(null);
+  const [askQuery, setAskQuery] = useState("");
+  const [askAnswer, setAskAnswer] = useState(null);
+  const [askLoading, setAskLoading] = useState(false);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
@@ -387,11 +403,21 @@ export default function Dashboard() {
     } catch (e) { console.error("News digest fetch failed:", e); }
   }, []);
 
+  const fetchDayPlan = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.DAY_PLAN_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setDayPlan(data);
+    } catch (e) { console.error("Day plan fetch failed:", e); }
+  }, []);
+
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
     fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
+    fetchDayPlan();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
@@ -399,7 +425,7 @@ export default function Dashboard() {
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchDayPlan]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -507,6 +533,41 @@ export default function Dashboard() {
         ))}
       </SimpleGrid>
 
+      {/* COMMAND BAR */}
+      <Paper withBorder p="sm" mb="md" radius="md">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          if (!askQuery.trim() || askLoading) return;
+          setAskLoading(true);
+          setAskAnswer(null);
+          try {
+            const res = await fetch(CONFIG.ASK_API, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: askQuery }),
+            });
+            const data = await res.json();
+            setAskAnswer(data.answer || "");
+          } catch { setAskAnswer("Something went wrong."); }
+          finally { setAskLoading(false); }
+        }}>
+          <Group gap="xs">
+            <TextInput
+              placeholder="Ask anything… fastest way to midtown? dinner ideas? what's happening tonight?"
+              value={askQuery}
+              onChange={e => setAskQuery(e.currentTarget.value)}
+              style={{ flex: 1 }}
+              size="sm"
+              leftSection={<Text size="sm">✦</Text>}
+            />
+            <Button type="submit" size="sm" variant="light" color="violet" loading={askLoading}>Ask</Button>
+          </Group>
+        </form>
+        {askAnswer && (
+          <Text size="sm" c="dimmed" mt="xs" lh={1.5}>{askAnswer}</Text>
+        )}
+      </Paper>
+
       {/* DAILY BRIEFING */}
       {briefing && (
         <Paper withBorder p="md" mb="md" radius="md">
@@ -518,6 +579,17 @@ export default function Dashboard() {
             </Text>
           </Group>
           <Text size="sm" c="dimmed" lh={1.6}>{briefing.text}</Text>
+        </Paper>
+      )}
+
+      {/* DAY PLAN */}
+      {dayPlan && (
+        <Paper withBorder p="md" mb="md" radius="md">
+          <Group gap="xs" mb="xs">
+            <Badge color="teal" variant="light" size="sm" radius="sm">AI</Badge>
+            <Text size="sm" fw={500}>Today's Plan</Text>
+          </Group>
+          <Text size="sm" c="dimmed" lh={1.6}>{dayPlan.text}</Text>
         </Paper>
       )}
 
@@ -712,7 +784,7 @@ export default function Dashboard() {
               <ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon>
             </Group>
           </Group>
-          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+          <SectionCard>
             <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
@@ -745,7 +817,7 @@ export default function Dashboard() {
                 }
               </Table.Tbody>
             </Table>
-          </Card>
+          </SectionCard>
 
           <Divider mb="md" />
 
@@ -801,7 +873,7 @@ export default function Dashboard() {
           {eventPicks && (
             <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>
           )}
-          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+          <SectionCard>
             {events.length === 0
               ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
               : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
@@ -824,7 +896,7 @@ export default function Dashboard() {
                 );
               })
             }
-          </Card>
+          </SectionCard>
 
           <Divider mb="md" />
 
@@ -846,15 +918,13 @@ export default function Dashboard() {
             }
           />
           {sportsRecap && (
-            <Text size="xs" c="dimmed" mt="sm" mb="sm" fs="italic">
-  {sportsRecap}
-</Text>
+            <Text size="xs" c="dimmed" mt="xs" mb="xs" fs="italic">{sportsRecap}</Text>
           )}
           {!sportsGroups
             ? <Text size="sm" c="dimmed" mb="md">Loading...</Text>
             : (
               <Box mb="md">
-                <Card withBorder p={0} radius="md" mb="sm" style={{ overflow: "hidden" }}>
+                <SectionCard mb="sm">
                   <Table verticalSpacing={6} horizontalSpacing="sm">
                     <Table.Thead>
                       <Table.Tr>
@@ -891,9 +961,9 @@ export default function Dashboard() {
                       ])}
                     </Table.Tbody>
                   </Table>
-                </Card>
+                </SectionCard>
                 {sports[sportsLeague]?.news?.length > 0 && (
-                  <Card withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
+                  <SectionCard mb="md">
                     {sports[sportsLeague].news.map((n, i) => (
                       <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                         <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never"
@@ -906,7 +976,7 @@ export default function Dashboard() {
                         {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
                       </Box>
                     ))}
-                  </Card>
+                  </SectionCard>
                 )}
               </Box>
             )
@@ -919,7 +989,7 @@ export default function Dashboard() {
           {newsDigest && (
             <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
           )}
-          <Card withBorder p={0} radius="md" mb="md" style={{ overflow: "hidden" }}>
+          <SectionCard>
             {news.length === 0
               ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
               : news.slice(0, 15).map((item, i) => (
@@ -940,7 +1010,7 @@ export default function Dashboard() {
                 </Group>
               ))
             }
-          </Card>
+          </SectionCard>
 
         </Grid.Col>
       </Grid>

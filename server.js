@@ -571,16 +571,16 @@ app.get("/api/sports-recap", async (req, res) => {
 
     if (allGames.length === 0) return res.json({ text: "" });
 
-    const prompt = `You are a sports analyst. Write 1-2 sentences summarizing notable results from the games listed below. Only reference these specific games — do not mention any events or context outside this list.
+    const prompt = `You are a sports analyst. Write exactly 2 sentences summarizing the most notable results below. Be concise — do not exceed 2 sentences. Only reference these specific games.
 
 Completed games (last 30 days):
-${allGames.join("\n")}
+${allGames.slice(0, 10).join("\n")}
 
 Plain text only, no markdown.`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 80,
+      max_tokens: 120,
       messages: [{ role: "user", content: prompt }],
     });
 

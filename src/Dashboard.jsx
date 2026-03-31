@@ -229,6 +229,7 @@ export default function Dashboard() {
   const [sportsRecap, setSportsRecap] = useState(null);
   const [eventPicks, setEventPicks] = useState(null);
   const [newsDigest, setNewsDigest] = useState(null);
+  const [newsCategory, setNewsCategory] = useState("All");
   const [dayPlan, setDayPlan] = useState(null);
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
@@ -985,16 +986,30 @@ export default function Dashboard() {
           <Divider mb="md" />
 
           {/* NEWS */}
-          <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" />
+          <SectionHeader
+            badge="News" badgeColor="blue" title="Top Headlines"
+            right={
+              <SegmentedControl
+                size="xs"
+                value={newsCategory}
+                onChange={setNewsCategory}
+                data={["All", "World", "Business", "Tech", "NYC"]}
+              />
+            }
+          />
           {newsDigest && (
             <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
           )}
           <SectionCard>
-            {news.length === 0
-              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
-              : news.slice(0, 15).map((item, i) => (
-                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < 14 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                  <Badge size="xs" variant="outline" color="gray" style={{ flexShrink: 0 }}>{item.source}</Badge>
+            {(() => {
+              const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
+              if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
+              return filtered.slice(0, 15).map((item, i, arr) => (
+                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                  <Stack gap={2} style={{ flexShrink: 0 }}>
+                    <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
+                    <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
+                  </Stack>
                   <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never"
                     style={{ flex: 1, lineHeight: 1.4 }}
                     onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
@@ -1008,8 +1023,8 @@ export default function Dashboard() {
                     </Text>
                   )}
                 </Group>
-              ))
-            }
+              ));
+            })()}
           </SectionCard>
 
         </Grid.Col>

@@ -354,9 +354,15 @@ app.get("/api/path/all", async (req, res) => {
 });
 
 const RSS_FEEDS = [
-  { name: "Reuters", url: "https://feeds.reuters.com/reuters/topNews" },
-  { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
-  { name: "NY Times", url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml" },
+  { name: "Reuters",    category: "World",    url: "https://feeds.reuters.com/reuters/topNews" },
+  { name: "AP News",    category: "World",    url: "https://feeds.apnews.com/rss/topnews" },
+  { name: "NY Times",   category: "World",    url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml" },
+  { name: "CNBC",       category: "Business", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html" },
+  { name: "WSJ Markets",category: "Business", url: "https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines" },
+  { name: "NYT Tech",   category: "Tech",     url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml" },
+  { name: "The Verge",  category: "Tech",     url: "https://www.theverge.com/rss/index.xml" },
+  { name: "NY Times",   category: "NYC",      url: "https://rss.nytimes.com/services/xml/rss/nyt/NYRegion.xml" },
+  { name: "Gothamist",  category: "NYC",      url: "https://gothamist.com/feed" },
 ];
 
 let cachedNews = null;
@@ -374,13 +380,16 @@ app.get("/api/news", async (req, res) => {
       const r = await fetch(feed.url, { headers: { "User-Agent": "Mozilla/5.0" } });
       const xml = await r.text();
       const parsed = parser.parse(xml);
-      const items = parsed?.rss?.channel?.item || [];
-      for (const item of (Array.isArray(items) ? items : [items]).slice(0, 8)) {
+      const items = parsed?.rss?.channel?.item || parsed?.feed?.entry || [];
+      for (const item of (Array.isArray(items) ? items : [items]).slice(0, 6)) {
+        const title = item.title?.["#text"] || item.title?.toString().replace(/<[^>]*>/g, "").trim() || "";
+        if (!title) continue;
         allItems.push({
-          title: item.title?.toString().replace(/<[^>]*>/g, "").trim() || "",
-          link: item.link || item.guid || "",
+          title,
+          link: item.link?.["@_href"] || item.link || item.guid?.["#text"] || item.guid || "",
           source: feed.name,
-          pubDate: item.pubDate || null,
+          category: feed.category,
+          pubDate: item.pubDate || item.updated || item.published || null,
         });
       }
     } catch (e) {

@@ -20,7 +20,6 @@ const CONFIG = {
   SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
   EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
   NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
-  DAY_PLAN_API: "https://hoboken-dashboard-production.up.railway.app/api/day-plan",
   ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
@@ -230,7 +229,6 @@ export default function Dashboard() {
   const [eventPicks, setEventPicks] = useState(null);
   const [newsDigest, setNewsDigest] = useState(null);
   const [newsCategory, setNewsCategory] = useState("All");
-  const [dayPlan, setDayPlan] = useState(null);
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
   const [askLoading, setAskLoading] = useState(false);
@@ -404,21 +402,11 @@ export default function Dashboard() {
     } catch (e) { console.error("News digest fetch failed:", e); }
   }, []);
 
-  const fetchDayPlan = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.DAY_PLAN_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setDayPlan(data);
-    } catch (e) { console.error("Day plan fetch failed:", e); }
-  }, []);
-
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
     fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
-    fetchDayPlan();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
@@ -426,7 +414,7 @@ export default function Dashboard() {
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchDayPlan]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -583,16 +571,6 @@ export default function Dashboard() {
         </Paper>
       )}
 
-      {/* DAY PLAN */}
-      {dayPlan && (
-        <Paper withBorder p="md" mb="md" radius="md">
-          <Group gap="xs" mb="xs">
-            <Badge color="teal" variant="light" size="sm" radius="sm">AI</Badge>
-            <Text size="sm" fw={500}>Today's Plan</Text>
-          </Group>
-          <Text size="sm" c="dimmed" lh={1.6}>{dayPlan.text}</Text>
-        </Paper>
-      )}
 
       {/* TWO-COLUMN GRID */}
       <Grid gutter="lg">

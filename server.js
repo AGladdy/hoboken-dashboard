@@ -187,8 +187,15 @@ app.get("/api/events", async (req, res) => {
       priceMin: e.priceRanges?.[0]?.min || null,
       priceMax: e.priceRanges?.[0]?.max || null,
     }));
-    if (events.length > 0) {
-      cachedEvents = events;
+    // Deduplicate by name — keep the earliest occurrence
+    const seen = new Set();
+    const deduped = events.filter(e => {
+      if (seen.has(e.name)) return false;
+      seen.add(e.name);
+      return true;
+    });
+    if (deduped.length > 0) {
+      cachedEvents = deduped;
       lastEventFetch = now;
     }
     res.json(cachedEvents || []);

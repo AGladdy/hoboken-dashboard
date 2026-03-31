@@ -825,8 +825,7 @@ app.get("/api/strava", async (req, res) => {
 
   try {
     const token = await getStravaAccessToken();
-    const after = Math.floor((now - 60 * 24 * 60 * 60 * 1000) / 1000);
-    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=60`, {
+    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=30`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const activities = await r.json();
@@ -859,8 +858,6 @@ app.get("/api/strava", async (req, res) => {
       heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
       calories: a.calories ? Math.round(a.calories) : null,
     }));
-
-    result.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // Weekly summary (last 7 days rolling)
     const sevenDaysAgo = new Date();

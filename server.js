@@ -855,17 +855,35 @@ app.get("/api/strava", async (req, res) => {
       pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
       elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
       heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
+      calories: a.calories ? Math.round(a.calories) : null,
     }));
 
-    // Weekly summary (Mon–Sun)
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
-    weekStart.setHours(0, 0, 0, 0);
-    const thisWeek = result.filter(a => new Date(a.date + "T00:00:00") >= weekStart);
-    const weeklyMiles = thisWeek.reduce((sum, a) => sum + (parseFloat(a.distance) || 0), 0);
+    result.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Weekly summary (last 7 days rolling)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const thisWeek = result.filter(a => new Date(a.date + "T00:00:00") >= sevenDaysAgo);
     const weeklyCount = thisWeek.length;
 
-    cachedStrava = { activities: result.slice(0, 10), weeklyMiles: weeklyMiles.toFixed(1), weeklyCount, fetchedAt: new Date().toISOString() };
+    // Bar chart: last 14 days, one bar per day with total minutes
+    const chartDays = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const label = d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+      const dayActivities = result.filter(a => a.date === dateStr);
+      const mins = dayActivities.reduce((sum, a) => {
+        const parts = a.duration.match(/(\d+)h\s*(\d+)m|(\d+)m/);
+        if (!parts) return sum;
+        return sum + (parts[1] ? parseInt(parts[1]) * 60 + parseInt(parts[2]) : parseInt(parts[3]));
+      }, 0);
+      chartDays.push({ day: label, mins: mins || null });
+    }
+
+    cachedStrava = { activities: result.slice(0, 10), weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
     lastStravaFetch = now;
     res.json(cachedStrava);
   } catch (e) {

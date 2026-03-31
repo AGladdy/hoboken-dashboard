@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { BarChart } from "@mantine/charts";
+import "@mantine/charts/styles.css";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
   Button, Anchor, Table, Divider, SegmentedControl, ActionIcon,
@@ -763,12 +765,22 @@ export default function Dashboard() {
             <>
               <Divider mb="md" />
               <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity"
-                right={
-                  <Text size="xs" c="dimmed">
-                    {strava.weeklyCount} activities · {strava.weeklyMiles} mi this week
-                  </Text>
-                }
+                right={<Text size="xs" c="dimmed">{strava.weeklyCount} session{strava.weeklyCount !== 1 ? "s" : ""} this week</Text>}
               />
+              {strava.chartData?.length > 0 && (
+                <BarChart
+                  h={120}
+                  mb="sm"
+                  data={strava.chartData}
+                  dataKey="day"
+                  series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]}
+                  tickLine="none"
+                  gridAxis="none"
+                  withTooltip
+                  tooltipAnimationDuration={200}
+                  barProps={{ radius: 3 }}
+                />
+              )}
               <SectionCard mb="md">
                 {strava.activities.slice(0, 6).map((a, i, arr) => (
                   <Group key={a.id} p="xs" justify="space-between" wrap="nowrap"
@@ -782,10 +794,10 @@ export default function Dashboard() {
                       </Box>
                     </Group>
                     <Group gap="xs" wrap="nowrap">
-                      {a.distance && <Badge size="xs" variant="light" color="orange">{a.distance} mi</Badge>}
-                      {a.pace && <Text size="xs" c="dimmed">{a.pace}</Text>}
+                      <Badge size="xs" variant="light" color="orange">{a.type}</Badge>
                       <Text size="xs" c="dimmed">{a.duration}</Text>
                       {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
+                      {a.calories && <Text size="xs" c="dimmed">{a.calories} cal</Text>}
                     </Group>
                   </Group>
                 ))}
@@ -799,17 +811,20 @@ export default function Dashboard() {
         <Grid.Col span={{ base: 12, md: 6 }}>
 
           {/* STOCKS */}
+          <SectionHeader
+            badge="Stocks" badgeColor="green"
+            title="Top 100 Stocks"
+            right={
+              <Group gap="xs">
+                <Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text>
+                <ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon>
+                <ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon>
+              </Group>
+            }
+          />
           {stockDigest && (
             <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>
           )}
-          <Group justify="space-between" mb="xs">
-            <Text size="xs" c="dimmed" fw={500}>Top 100 Stocks</Text>
-            <Group gap="xs">
-              <Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text>
-              <ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon>
-              <ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon>
-            </Group>
-          </Group>
           <SectionCard>
             <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
               <Table.Thead>
@@ -962,7 +977,7 @@ export default function Dashboard() {
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                      {Object.entries(sportsGroups).map(([grp, teams], gi, all) => [
+                      {Object.entries(sportsGroups).map(([grp, teams]) => [
                         grp && (
                           <Table.Tr key={`grp-${grp}`}>
                             <Table.Td colSpan={5} style={{ background: "var(--mantine-color-default-hover)" }}>

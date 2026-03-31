@@ -530,14 +530,20 @@ app.get("/api/sports-recap", async (req, res) => {
       fetch("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard", { headers: { "User-Agent": "Mozilla/5.0" } }).then(r => r.json()).catch(() => ({})),
     ]);
 
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const extractGames = (data, leagueLabel) => {
       return (data.events || [])
-        .filter(e => e.status?.type?.completed === true)
+        .filter(e => {
+          if (!e.status?.type?.completed) return false;
+          const d = new Date(e.date || e.competitions?.[0]?.date);
+          return !isNaN(d) && d.getTime() >= thirtyDaysAgo;
+        })
         .map(e => {
           const comps = e.competitions?.[0]?.competitors || [];
           const home = comps.find(c => c.homeAway === "home");
           const away = comps.find(c => c.homeAway === "away");
-          return `${leagueLabel}: ${away?.team?.shortDisplayName || "?"} ${away?.score || "?"} @ ${home?.team?.shortDisplayName || "?"} ${home?.score || "?"}`;
+          const dateStr = new Date(e.date || e.competitions?.[0]?.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          return `${leagueLabel} (${dateStr}): ${away?.team?.shortDisplayName || "?"} ${away?.score || "?"} @ ${home?.team?.shortDisplayName || "?"} ${home?.score || "?"}`;
         });
     };
 
@@ -549,9 +555,9 @@ app.get("/api/sports-recap", async (req, res) => {
 
     if (allGames.length === 0) return res.json({ text: "" });
 
-    const prompt = `You are a sports analyst. Write 1-2 sentences summarizing notable results from recent games.
+    const prompt = `You are a sports analyst. Write 1-2 sentences summarizing notable results from the games listed below. Only reference these specific games — do not mention any events or context outside this list.
 
-Completed games:
+Completed games (last 30 days):
 ${allGames.join("\n")}
 
 Plain text only, no markdown.`;

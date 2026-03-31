@@ -21,6 +21,7 @@ const CONFIG = {
   EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
   NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
   ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
+  STRAVA_API: "https://hoboken-dashboard-production.up.railway.app/api/strava",
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
 };
@@ -228,6 +229,7 @@ export default function Dashboard() {
   const [sportsRecap, setSportsRecap] = useState(null);
   const [eventPicks, setEventPicks] = useState(null);
   const [newsDigest, setNewsDigest] = useState(null);
+  const [strava, setStrava] = useState(null);
   const [newsCategory, setNewsCategory] = useState("All");
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
@@ -402,19 +404,29 @@ export default function Dashboard() {
     } catch (e) { console.error("News digest fetch failed:", e); }
   }, []);
 
+  const fetchStrava = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.STRAVA_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.activities) setStrava(data);
+    } catch (e) { console.error("Strava fetch failed:", e); }
+  }, []);
+
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
     fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
+    fetchStrava();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
-      fetchSportsRecap();
+      fetchSportsRecap(); fetchStrava();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchStrava]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -745,6 +757,41 @@ export default function Dashboard() {
               </Grid.Col>
             </Grid>
           </Card>
+
+          {/* STRAVA */}
+          {strava && (
+            <>
+              <Divider mb="md" />
+              <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity"
+                right={
+                  <Text size="xs" c="dimmed">
+                    {strava.weeklyCount} activities · {strava.weeklyMiles} mi this week
+                  </Text>
+                }
+              />
+              <SectionCard mb="md">
+                {strava.activities.slice(0, 6).map((a, i, arr) => (
+                  <Group key={a.id} p="xs" justify="space-between" wrap="nowrap"
+                    style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}
+                  >
+                    <Group gap="xs" wrap="nowrap">
+                      <Text size="md">{a.emoji}</Text>
+                      <Box>
+                        <Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text>
+                        <Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text>
+                      </Box>
+                    </Group>
+                    <Group gap="xs" wrap="nowrap">
+                      {a.distance && <Badge size="xs" variant="light" color="orange">{a.distance} mi</Badge>}
+                      {a.pace && <Text size="xs" c="dimmed">{a.pace}</Text>}
+                      <Text size="xs" c="dimmed">{a.duration}</Text>
+                      {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
+                    </Group>
+                  </Group>
+                ))}
+              </SectionCard>
+            </>
+          )}
 
         </Grid.Col>
 

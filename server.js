@@ -794,6 +794,86 @@ User question: ${query}`;
   }
 });
 
+let stravaAccessToken = null;
+let stravaTokenExpiry = 0;
+let cachedStrava = null;
+let lastStravaFetch = 0;
+
+async function getStravaAccessToken() {
+  if (stravaAccessToken && Date.now() < stravaTokenExpiry - 60000) return stravaAccessToken;
+  const r = await fetch("https://www.strava.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.STRAVA_CLIENT_ID,
+      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      refresh_token: process.env.STRAVA_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+  const data = await r.json();
+  stravaAccessToken = data.access_token;
+  stravaTokenExpiry = data.expires_at * 1000;
+  return stravaAccessToken;
+}
+
+app.get("/api/strava", async (req, res) => {
+  const now = Date.now();
+  if (cachedStrava && now - lastStravaFetch < 900000) return res.json(cachedStrava);
+
+  try {
+    const token = await getStravaAccessToken();
+    const after = Math.floor((now - 28 * 24 * 60 * 60 * 1000) / 1000);
+    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=20`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const activities = await r.json();
+
+    const fmt = (meters) => (meters / 1609.34).toFixed(2);
+    const fmtPace = (metersPerSec) => {
+      const secsPerMile = 1609.34 / metersPerSec;
+      const m = Math.floor(secsPerMile / 60);
+      const s = Math.round(secsPerMile % 60).toString().padStart(2, "0");
+      return `${m}:${s}/mi`;
+    };
+    const fmtDuration = (secs) => {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    };
+
+    const typeEmoji = { Run: "🏃", Ride: "🚴", Swim: "🏊", Walk: "🚶", Hike: "🥾", Workout: "💪" };
+
+    const result = (Array.isArray(activities) ? activities : []).map(a => ({
+      id: a.id,
+      name: a.name,
+      type: a.sport_type || a.type,
+      emoji: typeEmoji[a.sport_type || a.type] || "🏅",
+      date: a.start_date_local?.split("T")[0],
+      distance: a.distance > 0 ? fmt(a.distance) : null,
+      duration: fmtDuration(a.moving_time),
+      pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
+      elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
+      heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
+    }));
+
+    // Weekly summary (Mon–Sun)
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + (weekStart.getDay() === 0 ? -6 : 1));
+    weekStart.setHours(0, 0, 0, 0);
+    const thisWeek = result.filter(a => new Date(a.date + "T00:00:00") >= weekStart);
+    const weeklyMiles = thisWeek.reduce((sum, a) => sum + (parseFloat(a.distance) || 0), 0);
+    const weeklyCount = thisWeek.length;
+
+    cachedStrava = { activities: result.slice(0, 10), weeklyMiles: weeklyMiles.toFixed(1), weeklyCount, fetchedAt: new Date().toISOString() };
+    lastStravaFetch = now;
+    res.json(cachedStrava);
+  } catch (e) {
+    console.error("Strava fetch failed:", e.message);
+    res.json(cachedStrava || { activities: [], weeklyMiles: "0", weeklyCount: 0 });
+  }
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", source: "panynj.gov", time: new Date().toISOString() });
 });

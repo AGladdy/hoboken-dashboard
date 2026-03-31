@@ -846,7 +846,9 @@ export default function Dashboard() {
             }
           />
           {sportsRecap && (
-            <Text size="xs" c="dimmed" mt="xs" fs="italic">{sportsRecap}</Text>
+            <Text size="xs" c="dimmed" mt="sm" mb="sm" fs="italic">
+  {sportsRecap}
+</Text>
           )}
           {!sportsGroups
             ? <Text size="sm" c="dimmed" mb="md">Loading...</Text>

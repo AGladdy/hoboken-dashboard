@@ -614,14 +614,16 @@ app.get("/api/event-picks", async (req, res) => {
       .slice(0, 15)
       .map(e => `${e.name} | ${e.date} | ${e.venue || "TBD"} | ${e.genre || e.category || ""}`);
 
-    const prompt = `You are an event curator. Based on the following upcoming NYC events and my preferences, recommend 1-2 events in a short natural sentence.
+    if (upcoming.length === 0) return res.json({ text: "" });
+
+    const prompt = `You are an event curator. Recommend 1-2 of the events below that best match my preferences. Write 1-2 sentences max with specific event names, dates, and venues. Do not ask questions or request more info — only use the events listed.
 
 My preferences: I like live music, food events, comedy, and unique NYC experiences. I'm less interested in sports events.
 
 Upcoming events (name | date | venue | genre):
 ${upcoming.join("\n")}
 
-Write 1-2 sentences recommending specific events with name, date, and venue. Be enthusiastic but concise. Plain text only.`;
+Plain text only, no markdown.`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",

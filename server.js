@@ -872,7 +872,7 @@ app.get("/api/strava", async (req, res) => {
 
   try {
     const token = await getStravaAccessToken();
-    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=30`, {
+    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=50`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const activities = await r.json();
@@ -892,15 +892,16 @@ app.get("/api/strava", async (req, res) => {
 
     const typeEmoji = { Run: "🏃", Ride: "🚴", Swim: "🏊", Walk: "🚶", Hike: "🥾", Workout: "💪" };
 
-    const top10 = (Array.isArray(activities) ? activities : []).slice(0, 10);
+    const allActivities = Array.isArray(activities) ? activities : [];
+    const top20 = allActivities.slice(0, 20);
 
-    // Fetch detail for each activity to get calories (list endpoint doesn't include it)
-    const details = await Promise.all(top10.map(a =>
+    // Fetch details for first 20 only to get calories without hitting rate limits
+    const details = await Promise.all(top20.map(a =>
       fetch(`https://www.strava.com/api/v3/activities/${a.id}`, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json()).catch(() => ({}))
     ));
 
-    const result = top10.map((a, i) => {
+    const result = allActivities.map((a, i) => {
       const detail = details[i] || {};
       return {
         id: a.id,
@@ -940,7 +941,7 @@ app.get("/api/strava", async (req, res) => {
       chartDays.push({ day: label, mins: mins || null });
     }
 
-    cachedStrava = { activities: result.slice(0, 10), weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
+    cachedStrava = { activities: result, weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
     lastStravaFetch = now;
     res.json(cachedStrava);
   } catch (e) {

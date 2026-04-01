@@ -808,7 +808,7 @@ export default function Dashboard() {
                 {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
                   {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} />}
                   <SectionCard mb="md">
-                    {strava.activities.slice(0, 6).map((a, i, arr) => (
+                    {strava.activities.map((a, i, arr) => (
                       <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                         <Group gap="xs" wrap="nowrap">
                           <Text size="md">{a.emoji}</Text>

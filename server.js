@@ -903,7 +903,7 @@ app.get("/api/strava", async (req, res) => {
       pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
       elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
       heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
-      calories: a.calories ? Math.round(a.calories) : null,
+      calories: a.calories ? Math.round(a.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
     }));
 
     // Weekly summary (last 7 days rolling)

@@ -132,17 +132,20 @@ app.get("/api/restaurants", async (req, res) => {
   try {
     const all = [];
     for (const loc of RESTAURANT_LOCATIONS) {
-      const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=30&fields=name,rating,price,categories,location,photos,website,tel`;
+      const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065,13031,13236,13064&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website,tel`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
       if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
       const data = await r.json();
+      const NON_RESTAURANT = /bar|pub|brewery|lounge|nightclub|club|cafe|coffee|bakery|dessert|ice cream|juice|smoothie|food truck|market|grocery|deli|bodega|convenience/i;
       for (const place of data.results || []) {
+        const cat = place.categories?.[0]?.name || "";
+        if (NON_RESTAURANT.test(cat)) continue;
         all.push({
           name: place.name,
           area: loc.label,
           rating: place.rating || null,
           price: place.price || null,
-          category: place.categories?.[0]?.name || "Restaurant",
+          category: cat || "Restaurant",
           address: place.location?.formatted_address || place.location?.address || "",
           photo: place.photos?.[0] ? `${place.photos[0].prefix}300x200${place.photos[0].suffix}` : null,
           website: place.website || null,

@@ -241,7 +241,7 @@ app.get("/api/briefing", async (req, res) => {
     const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
     const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
     const pathRes = { toNY: toNYMsgs.map(m => ({ headsign: m.headSign, secondsAway: parseInt(m.secondsToArrival, 10) })) };
-    const stocksRes = cachedStocks || [];
+    const stocksRes = cachedStocksMap['1mo'] || [];
     const eventsRes = cachedEvents || [];
 
     const temp = weatherRes?.current?.temperature_2m;
@@ -334,8 +334,8 @@ app.get("/api/stock-digest", async (req, res) => {
   const now = Date.now();
   if (cachedStockDigest && now - lastStockDigestFetch < 1800000) return res.json(cachedStockDigest);
 
-  if (!cachedStocks || cachedStocks.length === 0) await fetchAndCacheStocks();
-  const stocks = cachedStocks;
+  if (!cachedStocksMap['1mo'] || cachedStocksMap['1mo'].length === 0) await fetchAndCacheStocks('1mo');
+  const stocks = cachedStocksMap['1mo'];
   if (!stocks || stocks.length === 0) return res.json({ text: "", generatedAt: new Date().toISOString() });
 
   try {
@@ -808,7 +808,7 @@ app.post("/api/ask", async (req, res) => {
     const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
     const condCode = weatherRes?.current?.weathercode;
 
-    const topStocks = (cachedStocks || [])
+    const topStocks = (cachedStocksMap['1mo'] || [])
       .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
       .slice(0, 5)
       .map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(1)}%`)

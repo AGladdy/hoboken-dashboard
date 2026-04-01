@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PinInput } from "@mantine/core";
 import { CORRECT_PIN } from "./config";
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
 import "@mantine/charts/styles.css";
 import {
@@ -172,15 +175,32 @@ function SectionCard({ children, mb = "md" }) {
 }
 
 // ========== SECTION HEADER ==========
-function SectionHeader({ badge, badgeColor = "violet", title, right }) {
+function SectionHeader({ badge, badgeColor = "violet", title, right, dragHandle }) {
   return (
     <Group justify="space-between" mb="sm">
       <Group gap="xs">
+        {dragHandle && (
+          <Box component="span" {...dragHandle}
+            style={{ cursor: "grab", color: "var(--mantine-color-dimmed)", fontSize: 14, lineHeight: 1, touchAction: "none", userSelect: "none" }}
+            title="Drag to reorder"
+          >⠿</Box>
+        )}
         <Badge color={badgeColor} variant="filled" size="sm" radius="sm">{badge}</Badge>
         <Text fw={500} size="sm">{title}</Text>
       </Group>
       {right}
     </Group>
+  );
+}
+
+// ========== SORTABLE SECTION ==========
+function SortableSection({ id, children }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const dragHandleProps = { ref: setActivatorNodeRef, ...attributes, ...listeners };
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: "relative", zIndex: isDragging ? 10 : undefined }}>
+      {children(dragHandleProps)}
+    </div>
   );
 }
 
@@ -246,6 +266,11 @@ export default function Dashboard() {
   const [askLocked, setAskLocked] = useState(false);
   const [askPinError, setAskPinError] = useState(false);
   const ASK_LIMIT = 3;
+
+  const DEFAULT_LEFT = ['weather', 'path', 'ferry', 'bus', 'strava', 'news'];
+  const DEFAULT_RIGHT = ['stocks', 'sports', 'events', 'restaurants'];
+  const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
+  const [rightOrder, setRightOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_right_order')) || DEFAULT_RIGHT; } catch { return DEFAULT_RIGHT; } });
 
   useEffect(() => {
     if (!askLoading) { setAskDots(''); return; }
@@ -643,509 +668,285 @@ export default function Dashboard() {
 
 
       {/* TWO-COLUMN GRID */}
-      <Grid gutter="lg">
-
-        {/* ── LEFT COLUMN ── */}
-        <Grid.Col span={{ base: 12, md: 6 }}>
-
-          {/* WEATHER */}
-          <Text size="xs" c="dimmed" fw={500} mb="xs">{locationLabel}</Text>
-          <SimpleGrid cols={{ base: 3, xs: 5 }} mb="md">
-            <Card withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
-              <Text size="xs" c="dimmed" mb={2}>Today</Text>
-              <Text size="xs" c="dimmed" mb={2}>{weather ? (WMO_CODES[weather.code] || "Clear") : ""}</Text>
-              <Text size="sm" fw={700}>{weather ? `${weather.temp}°F` : "..."}</Text>
-              <Text size="xs" c="dimmed">{weather?.lo != null ? `${weather.lo}°` : ""}</Text>
-              <Text size="xs" c="blue.5" mt={2}>{weather?.rain != null ? `${weather.rain}%` : ""}</Text>
-              <Text size="xs" c="dimmed">{weather?.wind != null ? `${weather.wind} mph` : ""}</Text>
-            </Card>
-            {(weather?.daily || [{},{},{},{}]).map((d, i) => (
-              <Card key={d.day || i} withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
-                <Text size="xs" c="dimmed" mb={2}>{d.day || "..."}</Text>
-                <Text size="xs" c="dimmed" mb={2}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</Text>
-                <Text size="sm" fw={700}>{d.hi != null ? `${d.hi}°` : "..."}</Text>
-                <Text size="xs" c="dimmed">{d.lo != null ? `${d.lo}°` : ""}</Text>
-                <Text size="xs" c="blue.5" mt={2}>{d.rain != null ? `${d.rain}%` : ""}</Text>
-                <Text size="xs" c="dimmed">{d.wind != null ? `${d.wind} mph` : ""}</Text>
-              </Card>
-            ))}
-          </SimpleGrid>
-          {weatherNarrative && (
-            <Text size="xs" c="dimmed" mb="md" fs="italic">{weatherNarrative}</Text>
-          )}
-
-          <Divider mb="md" />
-
-
-          {/* PATH */}
-          <SectionHeader
-            badge="PATH" badgeColor="violet"
-            title="Hoboken to NYC"
-            right={
-              <Group gap="xs">
-                <Badge size="xs" color={pathLive ? "green" : "yellow"} variant="light">
-                  {pathLive ? "live" : "estimated"}
-                </Badge>
-                {pathUpdated && pathLive && (
-                  <Text size="xs" c="dimmed">
-                    {pathUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                  </Text>
-                )}
-              </Group>
-            }
-          />
-
-          {pathLive && (pathTrains.toNY.length > 0 || pathTrains.toNJFrom33S.length > 0) ? (
-            <Box mb="md">
-              {[
-                { label: "To NYC", trains: pathTrains.toNY, key: "ny" },
-                { label: "To NJ (from 33rd St)", trains: pathTrains.toNJFrom33S, key: "nj" },
-              ].map(({ label, trains, key }) => trains.length === 0 ? null : (
-                <Box key={key} mb="xs">
-                  <Text size="xs" c="dimmed" mb={4} mt={key === "nj" ? "sm" : 0}>{label}</Text>
-                  {trains.map((t, i) => {
-                    const { mins, display } = calcLiveCountdown(t, pathTrains.fetchedAt, now);
-                    return (
-                      <TransitRow
-                        key={i}
-                        color={t.lineColor}
-                        headsign={t.headsign}
-                        badge={<Badge size="xs" color="green" variant="light">Live</Badge>}
-                        right={
-                          <Text fw={700} size={mins <= 5 ? "lg" : "sm"} c={mins <= 3 ? "red" : undefined}>
-                            {display}
-                          </Text>
-                        }
-                        isLast={i === trains.length - 1}
-                      />
-                    );
-                  })}
-                </Box>
-              ))}
-            </Box>
-          ) : (
-            <Box mb="md">
-              {estTrains.map((t, i) => (
-                <TransitRow
-                  key={i}
-                  color={t.color}
-                  headsign={t.headsign}
-                  subtitle={t.routeName}
+      {(() => {
+        const renderSection = (id, dh) => {
+          switch (id) {
+            case 'weather': return (
+              <Box key="weather">
+                <SectionHeader badge="Weather" badgeColor="blue" title={locationLabel} dragHandle={dh} />
+                <SimpleGrid cols={{ base: 3, xs: 5 }} mb="md">
+                  <Card withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
+                    <Text size="xs" c="dimmed" mb={2}>Today</Text>
+                    <Text size="xs" c="dimmed" mb={2}>{weather ? (WMO_CODES[weather.code] || "Clear") : ""}</Text>
+                    <Text size="sm" fw={700}>{weather ? `${weather.temp}°F` : "..."}</Text>
+                    <Text size="xs" c="dimmed">{weather?.lo != null ? `${weather.lo}°` : ""}</Text>
+                    <Text size="xs" c="blue.5" mt={2}>{weather?.rain != null ? `${weather.rain}%` : ""}</Text>
+                    <Text size="xs" c="dimmed">{weather?.wind != null ? `${weather.wind} mph` : ""}</Text>
+                  </Card>
+                  {(weather?.daily || [{},{},{},{}]).map((d, i) => (
+                    <Card key={d.day || i} withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
+                      <Text size="xs" c="dimmed" mb={2}>{d.day || "..."}</Text>
+                      <Text size="xs" c="dimmed" mb={2}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</Text>
+                      <Text size="sm" fw={700}>{d.hi != null ? `${d.hi}°` : "..."}</Text>
+                      <Text size="xs" c="dimmed">{d.lo != null ? `${d.lo}°` : ""}</Text>
+                      <Text size="xs" c="blue.5" mt={2}>{d.rain != null ? `${d.rain}%` : ""}</Text>
+                      <Text size="xs" c="dimmed">{d.wind != null ? `${d.wind} mph` : ""}</Text>
+                    </Card>
+                  ))}
+                </SimpleGrid>
+                {weatherNarrative && <Text size="xs" c="dimmed" mb="md" fs="italic">{weatherNarrative}</Text>}
+              </Box>
+            );
+            case 'path': return (
+              <Box key="path">
+                <SectionHeader badge="PATH" badgeColor="violet" title="Hoboken to NYC" dragHandle={dh}
                   right={
                     <Group gap="xs">
-                      <Text size="xs" c="dimmed">{t.timeStr}</Text>
-                      <Text fw={700} size={t.minsAway <= 5 ? "lg" : "sm"} c={t.minsAway <= 3 ? "red" : undefined}>
-                        ~{fmtCountdown(t.minsAway)}
-                      </Text>
+                      <Badge size="xs" color={pathLive ? "green" : "yellow"} variant="light">{pathLive ? "live" : "estimated"}</Badge>
+                      {pathUpdated && pathLive && <Text size="xs" c="dimmed">{pathUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</Text>}
                     </Group>
                   }
-                  isLast={i === estTrains.length - 1}
                 />
-              ))}
-            </Box>
-          )}
-
-          <Divider mb="md" />
-
-          {/* FERRY */}
-          <SectionHeader
-            badge="Ferry" badgeColor="blue"
-            title="NY Waterway"
-            right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
-          />
-          <Box mb="md">
-            {[
-              { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
-              { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
-            ].map(({ route, toData, fromData }, ri, all) => {
-              const next = toData[0];
-              const nextReturn = fromData[0];
-              return (
-                <TransitRow
-                  key={ri}
-                  color="#0070c0"
-                  headsign={route.name}
-                  subtitle={next ? `To NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
-                  right={
-                    next ? (
-                      <Stack gap={0} align="flex-end">
-                        <Text fw={700} size={next.minsAway <= 5 ? "lg" : "sm"} c={next.minsAway <= 5 ? "blue" : undefined}>
-                          {fmtCountdown(next.minsAway)}
-                        </Text>
-                        {nextReturn && <Text size="xs" c="dimmed">← {nextReturn.time}</Text>}
-                      </Stack>
-                    ) : null
-                  }
-                  isLast={ri === all.length - 1}
-                />
-              );
-            })}
-          </Box>
-
-          <Divider mb="md" />
-
-          {/* BUS 126 */}
-          <SectionHeader
-            badge="126" badgeColor="orange"
-            title="NJ Transit Bus to 42nd St"
-            right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
-          />
-          <Box mb="md">
-            {(() => {
-              const nextOut = busDeps[0];
-              const nextIn = busReturn[0];
-              return (
-                <>
-                  <TransitRow
-                    color="#f97316"
-                    headsign={`To 42nd St · from ${BUS_126.from}`}
-                    subtitle={nextOut ? `~${BUS_126.tripTime} min ride` : "No more today"}
-                    right={nextOut ? (
-                      <Text fw={700} size={nextOut.minsAway <= 5 ? "lg" : "sm"} c={nextOut.minsAway <= 10 ? "orange" : undefined}>
-                        {nextOut.time} · {fmtCountdown(nextOut.minsAway)}
-                      </Text>
-                    ) : null}
-                    isLast={false}
-                  />
-                  <TransitRow
-                    color="#f97316"
-                    headsign={`To Hoboken · from ${BUS_126.returnFrom}`}
-                    subtitle={nextIn ? `~${BUS_126.tripTime} min ride` : "No more today"}
-                    right={nextIn ? (
-                      <Text fw={700} size="sm" c="dimmed">
-                        {nextIn.time}
-                      </Text>
-                    ) : null}
-                    isLast={true}
-                  />
-                </>
-              );
-            })()}
-          </Box>
-
-          {/* STRAVA */}
-          {strava && (
-            <>
-              <Divider mb="md" />
-              <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity"
-                right={<Text size="xs" c="dimmed">{strava.weeklyCount} session{strava.weeklyCount !== 1 ? "s" : ""} this week</Text>}
-              />
-              {strava.chartData?.length > 0 && (
-                <BarChart
-                  h={120}
-                  mb="sm"
-                  data={strava.chartData}
-                  dataKey="day"
-                  series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]}
-                  tickLine="none"
-                  gridAxis="none"
-                  withTooltip
-                  tooltipAnimationDuration={200}
-                  barProps={{ radius: 3 }}
-                />
-              )}
-              <SectionCard mb="md">
-                {strava.activities.slice(0, 6).map((a, i, arr) => (
-                  <Group key={a.id} p="xs" justify="space-between" wrap="nowrap"
-                    style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}
-                  >
-                    <Group gap="xs" wrap="nowrap">
-                      <Text size="md">{a.emoji}</Text>
-                      <Box>
-                        <Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text>
-                        <Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text>
+                {pathLive && (pathTrains.toNY.length > 0 || pathTrains.toNJFrom33S.length > 0) ? (
+                  <Box mb="md">
+                    {[{ label: "To NYC", trains: pathTrains.toNY, key: "ny" }, { label: "To NJ (from 33rd St)", trains: pathTrains.toNJFrom33S, key: "nj" }].map(({ label, trains, key }) => trains.length === 0 ? null : (
+                      <Box key={key} mb="xs">
+                        <Text size="xs" c="dimmed" mb={4} mt={key === "nj" ? "sm" : 0}>{label}</Text>
+                        {trains.map((t, i) => {
+                          const { mins, display } = calcLiveCountdown(t, pathTrains.fetchedAt, now);
+                          return <TransitRow key={i} color={t.lineColor} headsign={t.headsign} badge={<Badge size="xs" color="green" variant="light">Live</Badge>} right={<Text fw={700} size={mins <= 5 ? "lg" : "sm"} c={mins <= 3 ? "red" : undefined}>{display}</Text>} isLast={i === trains.length - 1} />;
+                        })}
                       </Box>
-                    </Group>
-                    <Group gap="xs" wrap="nowrap">
-                      <Badge size="xs" variant="light" color="orange">{a.type}</Badge>
-                      <Text size="xs" c="dimmed">{a.duration}</Text>
-                      {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
-                      {a.calories && <Text size="xs" c="dimmed">{a.calories} cal</Text>}
-                    </Group>
-                  </Group>
-                ))}
-              </SectionCard>
-            </>
-          )}
-
-          <Divider mb="md" />
-
-          {/* NEWS */}
-          <SectionHeader
-            badge="News" badgeColor="blue" title="Top Headlines"
-            right={
-              <SegmentedControl
-                size="xs"
-                value={newsCategory}
-                onChange={setNewsCategory}
-                data={["All", "World", "Business", "Tech", "NYC"]}
-              />
-            }
-          />
-          {newsDigest && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
-          )}
-          <SectionCard mb="md">
-            {(() => {
-              const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
-              if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
-              return filtered.slice(0, 15).map((item, i, arr) => (
-                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                  <Stack gap={2} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
-                    <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
-                  </Stack>
-                  <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never"
-                    style={{ flex: 1, lineHeight: 1.4 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
-                    onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
-                  >
-                    {item.title}
-                  </Anchor>
-                  {item.pubDate && (
-                    <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                      {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </Text>
-                  )}
-                </Group>
-              ));
-            })()}
-          </SectionCard>
-
-        </Grid.Col>
-
-        {/* ── RIGHT COLUMN ── */}
-        <Grid.Col span={{ base: 12, md: 6 }}>
-
-          {/* STOCKS */}
-          <SectionHeader
-            badge="Stocks" badgeColor="green"
-            title="Top 100 Stocks"
-            right={
-              <Group gap="xs">
-                <Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text>
-                <ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon>
-                <ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon>
-              </Group>
-            }
-          />
-          {stockDigest && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>
-          )}
-          <SectionCard>
-            <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th w={32} style={{ fontSize: 11 }}>#</Table.Th>
-                  <Table.Th style={{ fontSize: 11 }}>Symbol</Table.Th>
-                  <Table.Th style={{ fontSize: 11, textAlign: "right" }}>Price</Table.Th>
-                  <Table.Th style={{ fontSize: 11, textAlign: "right" }}>Change</Table.Th>
-                  <Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {stocks.length === 0
-                  ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
-                  : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
-                    const pos = s.pct >= 0;
-                    return (
-                      <Table.Tr key={s.symbol}>
-                        <Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td>
-                        <Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td>
-                        <Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td>
-                        <Table.Td style={{ textAlign: "right" }}>
-                          <Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text>
-                        </Table.Td>
-                        <Table.Td style={{ textAlign: "right" }} visibleFrom="xs">
-                          <Sparkline data={s.sparkline} positive={pos} />
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })
-                }
-              </Table.Tbody>
-            </Table>
-          </SectionCard>
-
-          <Divider mb="md" />
-
-          {/* SPORTS */}
-          <SectionHeader
-            badge="Sports" badgeColor="violet"
-            title="Standings & News"
-            right={
-              <SegmentedControl
-                size="xs"
-                value={sportsLeague}
-                onChange={setSportsLeague}
-                data={[
-                  { value: "nba", label: "NBA" },
-                  { value: "nfl", label: "NFL" },
-                  { value: "mlb", label: "MLB" },
-                ]}
-              />
-            }
-          />
-          {sportsRecap && (
-            <Text size="xs" c="dimmed" mt="xs" mb="xs" fs="italic">{sportsRecap}</Text>
-          )}
-          {!sportsGroups
-            ? <Text size="sm" c="dimmed" mb="md">Loading...</Text>
-            : (
-              <Box mb="md">
-                <SectionCard mb="sm">
-                  <Table verticalSpacing={6} horizontalSpacing="sm">
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th style={{ fontSize: 11 }}>Team</Table.Th>
-                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>W</Table.Th>
-                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>L</Table.Th>
-                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 56 }}>PCT</Table.Th>
-                        <Table.Th style={{ fontSize: 11, textAlign: "center", width: 46 }}>GB</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
+                    ))}
+                  </Box>
+                ) : (
+                  <Box mb="md">
+                    {estTrains.map((t, i) => (
+                      <TransitRow key={i} color={t.color} headsign={t.headsign} subtitle={t.routeName}
+                        right={<Group gap="xs"><Text size="xs" c="dimmed">{t.timeStr}</Text><Text fw={700} size={t.minsAway <= 5 ? "lg" : "sm"} c={t.minsAway <= 3 ? "red" : undefined}>~{fmtCountdown(t.minsAway)}</Text></Group>}
+                        isLast={i === estTrains.length - 1}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            );
+            case 'ferry': return (
+              <Box key="ferry">
+                <SectionHeader badge="Ferry" badgeColor="blue" title="NY Waterway" dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
+                <Box mb="md">
+                  {[
+                    { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
+                    { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
+                  ].map(({ route, toData, fromData }, ri, all) => {
+                    const next = toData[0]; const nextReturn = fromData[0];
+                    return <TransitRow key={ri} color="#0070c0" headsign={route.name} subtitle={next ? `To NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
+                      right={next ? <Stack gap={0} align="flex-end"><Text fw={700} size={next.minsAway <= 5 ? "lg" : "sm"} c={next.minsAway <= 5 ? "blue" : undefined}>{fmtCountdown(next.minsAway)}</Text>{nextReturn && <Text size="xs" c="dimmed">← {nextReturn.time}</Text>}</Stack> : null}
+                      isLast={ri === all.length - 1} />;
+                  })}
+                </Box>
+              </Box>
+            );
+            case 'bus': return (
+              <Box key="bus">
+                <SectionHeader badge="126" badgeColor="orange" title="NJ Transit Bus to 42nd St" dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
+                <Box mb="md">
+                  {(() => { const nextOut = busDeps[0]; const nextIn = busReturn[0]; return (<>
+                    <TransitRow color="#f97316" headsign={`To 42nd St · from ${BUS_126.from}`} subtitle={nextOut ? `~${BUS_126.tripTime} min ride` : "No more today"} right={nextOut ? <Text fw={700} size={nextOut.minsAway <= 5 ? "lg" : "sm"} c={nextOut.minsAway <= 10 ? "orange" : undefined}>{nextOut.time} · {fmtCountdown(nextOut.minsAway)}</Text> : null} isLast={false} />
+                    <TransitRow color="#f97316" headsign={`To Hoboken · from ${BUS_126.returnFrom}`} subtitle={nextIn ? `~${BUS_126.tripTime} min ride` : "No more today"} right={nextIn ? <Text fw={700} size="sm" c="dimmed">{nextIn.time}</Text> : null} isLast={true} />
+                  </>); })()}
+                </Box>
+              </Box>
+            );
+            case 'strava': return (
+              <Box key="strava">
+                <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity" dragHandle={dh}
+                  right={strava ? <Text size="xs" c="dimmed">{strava.weeklyCount} session{strava.weeklyCount !== 1 ? "s" : ""} this week</Text> : null}
+                />
+                {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
+                  {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} />}
+                  <SectionCard mb="md">
+                    {strava.activities.slice(0, 6).map((a, i, arr) => (
+                      <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                        <Group gap="xs" wrap="nowrap">
+                          <Text size="md">{a.emoji}</Text>
+                          <Box><Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text><Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text></Box>
+                        </Group>
+                        <Group gap="xs" wrap="nowrap">
+                          <Badge size="xs" variant="light" color="orange">{a.type}</Badge>
+                          <Text size="xs" c="dimmed">{a.duration}</Text>
+                          {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
+                          {a.calories && <Text size="xs" c="dimmed">{a.calories} cal</Text>}
+                        </Group>
+                      </Group>
+                    ))}
+                  </SectionCard>
+                </>)}
+              </Box>
+            );
+            case 'news': return (
+              <Box key="news">
+                <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" dragHandle={dh}
+                  right={<SegmentedControl size="xs" value={newsCategory} onChange={setNewsCategory} data={["All", "World", "Business", "Tech", "NYC"]} />}
+                />
+                {newsDigest && <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>}
+                <SectionCard mb="md">
+                  {(() => {
+                    const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
+                    if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
+                    return filtered.slice(0, 15).map((item, i, arr) => (
+                      <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                        <Stack gap={2} style={{ flexShrink: 0 }}>
+                          <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
+                          <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
+                        </Stack>
+                        <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never" style={{ flex: 1, lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{item.title}</Anchor>
+                        {item.pubDate && <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</Text>}
+                      </Group>
+                    ));
+                  })()}
+                </SectionCard>
+              </Box>
+            );
+            case 'stocks': return (
+              <Box key="stocks">
+                <SectionHeader badge="Stocks" badgeColor="green" title="Top 100 Stocks" dragHandle={dh}
+                  right={<Group gap="xs"><Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
+                />
+                {stockDigest && <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>}
+                <SectionCard>
+                  <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
+                    <Table.Thead><Table.Tr><Table.Th w={32} style={{ fontSize: 11 }}>#</Table.Th><Table.Th style={{ fontSize: 11 }}>Symbol</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }}>Price</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }}>Change</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th></Table.Tr></Table.Thead>
                     <Table.Tbody>
-                      {Object.entries(sportsGroups).map(([grp, teams]) => [
-                        grp && (
-                          <Table.Tr key={`grp-${grp}`}>
-                            <Table.Td colSpan={5} style={{ background: "var(--mantine-color-default-hover)" }}>
-                              <Text size="xs" fw={600} c="dimmed">{grp}</Text>
-                            </Table.Td>
-                          </Table.Tr>
-                        ),
-                        ...teams.map((t, i) => (
-                          <Table.Tr key={t.abbr || `${grp}-${i}`}>
-                            <Table.Td>
-                              <Group gap="xs">
-                                {t.logo && <img src={t.logo} alt={t.abbr} style={{ width: 18, height: 18, objectFit: "contain" }} />}
-                                <Text size="sm">{t.name}</Text>
-                              </Group>
-                            </Table.Td>
-                            <Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.wins}</Text></Table.Td>
-                            <Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.losses}</Text></Table.Td>
-                            <Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.pct}</Text></Table.Td>
-                            <Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.gb}</Text></Table.Td>
-                          </Table.Tr>
-                        )),
-                      ])}
+                      {stocks.length === 0 ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
+                        : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
+                          const pos = s.pct >= 0;
+                          return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ textAlign: "right" }} visibleFrom="xs"><Sparkline data={s.sparkline} positive={pos} /></Table.Td></Table.Tr>;
+                        })}
                     </Table.Tbody>
                   </Table>
                 </SectionCard>
-                {sports[sportsLeague]?.news?.length > 0 && (
-                  <SectionCard mb="md">
-                    {sports[sportsLeague].news.map((n, i) => (
-                      <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                        <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never"
-                          style={{ display: "block", lineHeight: 1.4 }}
-                          onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
-                          onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
-                        >
-                          {n.headline}
-                        </Anchor>
-                        {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
-                      </Box>
-                    ))}
-                  </SectionCard>
+              </Box>
+            );
+            case 'sports': return (
+              <Box key="sports">
+                <SectionHeader badge="Sports" badgeColor="violet" title="Standings & News" dragHandle={dh}
+                  right={<SegmentedControl size="xs" value={sportsLeague} onChange={setSportsLeague} data={[{ value: "nba", label: "NBA" }, { value: "nfl", label: "NFL" }, { value: "mlb", label: "MLB" }]} />}
+                />
+                {sportsRecap && <Text size="xs" c="dimmed" mt="xs" mb="xs" fs="italic">{sportsRecap}</Text>}
+                {!sportsGroups ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
+                  <Box mb="md">
+                    <SectionCard mb="sm">
+                      <Table verticalSpacing={6} horizontalSpacing="sm">
+                        <Table.Thead><Table.Tr><Table.Th style={{ fontSize: 11 }}>Team</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>W</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>L</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 56 }}>PCT</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 46 }}>GB</Table.Th></Table.Tr></Table.Thead>
+                        <Table.Tbody>
+                          {Object.entries(sportsGroups).map(([grp, teams]) => [
+                            grp && <Table.Tr key={`grp-${grp}`}><Table.Td colSpan={5} style={{ background: "var(--mantine-color-default-hover)" }}><Text size="xs" fw={600} c="dimmed">{grp}</Text></Table.Td></Table.Tr>,
+                            ...teams.map((t, i) => <Table.Tr key={t.abbr || `${grp}-${i}`}><Table.Td><Group gap="xs">{t.logo && <img src={t.logo} alt={t.abbr} style={{ width: 18, height: 18, objectFit: "contain" }} />}<Text size="sm">{t.name}</Text></Group></Table.Td><Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.wins}</Text></Table.Td><Table.Td style={{ textAlign: "center" }}><Text size="sm">{t.losses}</Text></Table.Td><Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.pct}</Text></Table.Td><Table.Td style={{ textAlign: "center" }}><Text size="xs" c="dimmed">{t.gb}</Text></Table.Td></Table.Tr>),
+                          ])}
+                        </Table.Tbody>
+                      </Table>
+                    </SectionCard>
+                    {sports[sportsLeague]?.news?.length > 0 && (
+                      <SectionCard mb="md">
+                        {sports[sportsLeague].news.map((n, i) => (
+                          <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                            <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never" style={{ display: "block", lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{n.headline}</Anchor>
+                            {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
+                          </Box>
+                        ))}
+                      </SectionCard>
+                    )}
+                  </Box>
                 )}
               </Box>
-            )
-          }
-
-          {/* EVENTS */}
-          <Divider mb="md" />
-          <SectionHeader
-            badge="Events" badgeColor="violet"
-            title="NYC This Week"
-            right={
-              <Group gap="xs">
-                <Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text>
-                <ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon>
-                <ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon>
-              </Group>
-            }
-          />
-          {eventPicks && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>
-          )}
-          <SectionCard mb="md">
-            {events.length === 0
-              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
-              : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
-                const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
-                const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-                return (
-                  <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                    {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="xs" fw={500} truncate>{e.name}</Text>
-                      <Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text>
-                    </Box>
-                    <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}>
-                      <Text size="xs" c="dimmed">{dateStr}</Text>
-                      <Text size="xs" c="dimmed">{timeStr}</Text>
-                      {e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}
-                    </Stack>
-                    {e.url && <Anchor href={e.url} target="_blank" size="xs" c="blue">→</Anchor>}
-                  </Group>
-                );
-              })
-            }
-          </SectionCard>
-
-          {/* RESTAURANT */}
-          {restaurants.length > 0 && (
-            <>
-              <Divider mb="md" />
-              <Box mb="md">
-                <SectionHeader
-                  badge="Eat" badgeColor="orange"
-                  title="Where to Eat"
-                  right={
-                    <SegmentedControl
-                      size="xs"
-                      value={restaurantArea}
-                      onChange={setRestaurantArea}
-                      data={["Hoboken", "Manhattan"]}
-                    />
-                  }
+            );
+            case 'events': return (
+              <Box key="events">
+                <SectionHeader badge="Events" badgeColor="violet" title="NYC This Week" dragHandle={dh}
+                  right={<Group gap="xs"><Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text><ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
-                {restaurantPick && (
-                  <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>
-                )}
-                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
-                  {restaurants
-                    .filter(r => r.area === restaurantArea)
-                    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-                    .slice(0, 6)
-                    .map((r, i) => (
+                {eventPicks && <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>}
+                <SectionCard mb="md">
+                  {events.length === 0 ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
+                    : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
+                      const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
+                      const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+                      return (
+                        <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                          {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                          <Box style={{ flex: 1, minWidth: 0 }}><Text size="xs" fw={500} truncate>{e.name}</Text><Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text></Box>
+                          <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}><Text size="xs" c="dimmed">{dateStr}</Text><Text size="xs" c="dimmed">{timeStr}</Text>{e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}</Stack>
+                          {e.url && <Anchor href={e.url} target="_blank" size="xs" c="blue">→</Anchor>}
+                        </Group>
+                      );
+                    })}
+                </SectionCard>
+              </Box>
+            );
+            case 'restaurants': return (
+              <Box key="restaurants">
+                <SectionHeader badge="Eat" badgeColor="orange" title="Where to Eat" dragHandle={dh}
+                  right={<SegmentedControl size="xs" value={restaurantArea} onChange={setRestaurantArea} data={["Hoboken", "Manhattan"]} />}
+                />
+                {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
+                {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
+                  <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mb="md">
+                    {restaurants.filter(r => r.area === restaurantArea).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6).map((r, i) => (
                       <Card key={i} withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
-                        {r.photo && (
-                          <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />
-                        )}
+                        {r.photo && <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />}
                         <Box p="sm">
-                          <Group justify="space-between" mb={4} wrap="nowrap">
-                            <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>
-                            {r.rating && (
-                              <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>
-                            )}
-                          </Group>
-                          <Group gap="xs" mb={4}>
-                            <Badge size="xs" variant="light" color="orange">{r.category}</Badge>
-                            {r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}
-                          </Group>
+                          <Group justify="space-between" mb={4} wrap="nowrap"><Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>{r.rating && <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}</Group>
+                          <Group gap="xs" mb={4}><Badge size="xs" variant="light" color="orange">{r.category}</Badge>{r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}</Group>
                           <Text size="xs" c="dimmed" truncate mb={4}>{r.address}</Text>
                           {r.website && <Anchor href={r.website} target="_blank" size="xs">Visit →</Anchor>}
                         </Box>
                       </Card>
-                    ))
-                  }
-                </SimpleGrid>
+                    ))}
+                  </SimpleGrid>
+                )}
               </Box>
-            </>
-          )}
+            );
+            default: return null;
+          }
+        };
 
-        </Grid.Col>
-      </Grid>
+        const handleDragEnd = (setOrder, storageKey) => ({ active, over }) => {
+          if (!over || active.id === over.id) return;
+          setOrder(prev => {
+            const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id));
+            localStorage.setItem(storageKey, JSON.stringify(next));
+            return next;
+          });
+        };
+
+        return (
+          <Grid gutter="lg">
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd(setLeftOrder, 'gl_left_order')}>
+                <SortableContext items={leftOrder} strategy={verticalListSortingStrategy}>
+                  {leftOrder.map((id, idx) => (
+                    <SortableSection key={id} id={id}>
+                      {(dh) => <Box>{idx > 0 && <Divider mb="md" />}{renderSection(id, dh)}</Box>}
+                    </SortableSection>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd(setRightOrder, 'gl_right_order')}>
+                <SortableContext items={rightOrder} strategy={verticalListSortingStrategy}>
+                  {rightOrder.map((id, idx) => (
+                    <SortableSection key={id} id={id}>
+                      {(dh) => <Box>{idx > 0 && <Divider mb="md" />}{renderSection(id, dh)}</Box>}
+                    </SortableSection>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </Grid.Col>
+          </Grid>
+        );
+      })()}
 
       {/* FOOTER */}
       <Group justify="space-between" mt="md">

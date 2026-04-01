@@ -267,7 +267,7 @@ export default function Dashboard() {
   const [askPinError, setAskPinError] = useState(false);
   const ASK_LIMIT = 3;
 
-  const DEFAULT_LEFT = ['weather', 'path', 'ferry', 'bus', 'strava', 'news'];
+  const DEFAULT_LEFT = ['weather', 'strava', 'path', 'ferry', 'bus', 'news'];
   const DEFAULT_RIGHT = ['stocks', 'sports', 'events', 'restaurants'];
   const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
   const [rightOrder, setRightOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_right_order')) || DEFAULT_RIGHT; } catch { return DEFAULT_RIGHT; } });

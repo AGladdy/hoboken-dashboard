@@ -765,7 +765,7 @@ export default function Dashboard() {
                   key={ri}
                   color="#0070c0"
                   headsign={route.name}
-                  subtitle={next ? `→ NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
+                  subtitle={next ? `To NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
                   right={
                     next ? (
                       <Stack gap={0} align="flex-end">
@@ -791,20 +791,36 @@ export default function Dashboard() {
             right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
           />
           <Box mb="md">
-            {busDeps.slice(0, 4).map((b, i) => (
-              <TransitRow
-                key={i}
-                color="#f97316"
-                headsign={`→ 42nd St · from ${BUS_126.from}`}
-                subtitle={`~${BUS_126.tripTime} min ride`}
-                right={
-                  <Text fw={700} size={b.minsAway <= 5 ? "lg" : "sm"} c={b.minsAway <= 10 ? "orange" : undefined}>
-                    {b.time} · {fmtCountdown(b.minsAway)}
-                  </Text>
-                }
-                isLast={i === Math.min(busDeps.length, 4) - 1}
-              />
-            ))}
+            {(() => {
+              const nextOut = busDeps[0];
+              const nextIn = busReturn[0];
+              return (
+                <>
+                  <TransitRow
+                    color="#f97316"
+                    headsign={`To 42nd St · from ${BUS_126.from}`}
+                    subtitle={nextOut ? `~${BUS_126.tripTime} min ride` : "No more today"}
+                    right={nextOut ? (
+                      <Text fw={700} size={nextOut.minsAway <= 5 ? "lg" : "sm"} c={nextOut.minsAway <= 10 ? "orange" : undefined}>
+                        {nextOut.time} · {fmtCountdown(nextOut.minsAway)}
+                      </Text>
+                    ) : null}
+                    isLast={false}
+                  />
+                  <TransitRow
+                    color="#f97316"
+                    headsign={`To Hoboken · from ${BUS_126.returnFrom}`}
+                    subtitle={nextIn ? `~${BUS_126.tripTime} min ride` : "No more today"}
+                    right={nextIn ? (
+                      <Text fw={700} size="sm" c="dimmed">
+                        {nextIn.time}
+                      </Text>
+                    ) : null}
+                    isLast={true}
+                  />
+                </>
+              );
+            })()}
           </Box>
 
           {/* STRAVA */}

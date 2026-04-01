@@ -529,9 +529,9 @@ export default function Dashboard() {
     <Box bg={dark ? "var(--mantine-color-dark-8)" : "var(--mantine-color-gray-1)"} mih="100vh" p="md">
 
       {/* HEADER */}
-      <Group justify="space-between" mb="md">
+      <Group justify="space-between" mb="md" wrap="wrap" gap="xs">
         <Text fw={700} size="lg">Gladdy's Life</Text>
-        <Group gap="sm">
+        <Group gap="sm" wrap="wrap">
           <Text size="sm" c="dimmed" ff="monospace">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
           </Text>

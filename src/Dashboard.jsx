@@ -143,10 +143,10 @@ const WMO_ICONS = {0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",51:"�
 
 // ========== SPARKLINE ==========
 function Sparkline({ data, positive }) {
-  if (!data || data.length < 2) return <svg width={80} height={28} />;
+  if (!data || data.length < 2) return <svg width="100%" height={28} />;
   const min = Math.min(...data), max = Math.max(...data);
   const range = max - min || 1;
-  const w = 80, h = 28, pad = 2;
+  const w = 200, h = 28, pad = 2;
   const pts = data.map((v, i) => [
     pad + (i / (data.length - 1)) * (w - pad * 2),
     pad + (1 - (v - min) / range) * (h - pad * 2),
@@ -155,7 +155,7 @@ function Sparkline({ data, positive }) {
   const area = `${pts[0][0]},${h} ${line} ${pts[pts.length - 1][0]},${h}`;
   const color = positive ? "#22c55e" : "#ef4444";
   return (
-    <svg width={w} height={h} style={{ display: "block" }}>
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block" }}>
       <polygon points={area} fill={color} opacity={0.15} />
       <polyline points={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
     </svg>
@@ -802,7 +802,7 @@ export default function Dashboard() {
                             <Table.Th style={thStyle('symbol')} onClick={() => toggle('symbol')}>Symbol{arrow('symbol')}</Table.Th>
                             <Table.Th style={{ ...thStyle('price'), textAlign: "right" }} onClick={() => toggle('price')}>Price{arrow('price')}</Table.Th>
                             <Table.Th style={{ ...thStyle('pct'), textAlign: "right" }} onClick={() => toggle('pct')}>Change{arrow('pct')}</Table.Th>
-                            <Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th>
+                            <Table.Th style={{ fontSize: 11, width: "100%" }} visibleFrom="xs">14d</Table.Th>
                           </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
@@ -810,7 +810,7 @@ export default function Dashboard() {
                             ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
                             : sorted.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
                               const pos = s.pct >= 0;
-                              return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ textAlign: "right" }} visibleFrom="xs"><Sparkline data={s.sparkline} positive={pos} /></Table.Td></Table.Tr>;
+                              return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ width: "100%" }} visibleFrom="xs"><Sparkline data={s.sparkline?.slice(-14)} positive={pos} /></Table.Td></Table.Tr>;
                             })}
                         </Table.Tbody>
                       </Table>

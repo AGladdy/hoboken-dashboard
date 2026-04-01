@@ -74,7 +74,7 @@ let lastStockFetch = 0;
 
 async function fetchBatch(symbols) {
   return Promise.all(symbols.map(sym =>
-    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=5d`, { headers: { "User-Agent": "Mozilla/5.0" } })
+    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } })
       .then(r => r.json())
       .catch(() => null)
   ));

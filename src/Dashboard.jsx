@@ -627,11 +627,30 @@ export default function Dashboard() {
             </Group>
           </form>
         )}
-        {askLoading && (
-          <Text size="sm" c="dimmed" mt="xs" fs="italic">Thinking{askDots}</Text>
-        )}
-        {!askLoading && askAnswer && (
-          <Text size="sm" c="dimmed" mt="xs" lh={1.5}>{askAnswer}</Text>
+        {(askHistory.length > 0 || askLoading) && (
+          <Box mt="xs" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+            {askHistory.map((h, i) => (
+              <Box key={i} style={{ textAlign: h.role === "user" ? "right" : "left" }}>
+                <Text
+                  size="sm"
+                  lh={1.6}
+                  style={{
+                    display: "inline-block",
+                    background: h.role === "user" ? "var(--mantine-color-violet-light)" : "var(--mantine-color-default-hover)",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    maxWidth: "90%",
+                    textAlign: "left",
+                  }}
+                >
+                  {h.content}
+                </Text>
+              </Box>
+            ))}
+            {askLoading && (
+              <Text size="sm" c="dimmed" fs="italic" style={{ padding: "4px 2px" }}>Thinking{askDots}</Text>
+            )}
+          </Box>
         )}
       </Paper>
 

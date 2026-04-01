@@ -143,6 +143,7 @@ function calcLiveCountdown(train, fetchedAt, now) {
 }
 
 const WMO_CODES = {0:"Clear",1:"Mostly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",51:"Light drizzle",61:"Light rain",63:"Rain",65:"Heavy rain",71:"Light snow",73:"Snow",75:"Heavy snow",80:"Rain showers",95:"Thunderstorm"};
+const WMO_ICONS = {0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",51:"🌦️",61:"🌧️",63:"🌧️",65:"🌧️",71:"🌨️",73:"❄️",75:"❄️",80:"🌦️",95:"⛈️"};
 
 // ========== SPARKLINE ==========
 function Sparkline({ data, positive }) {
@@ -246,6 +247,8 @@ export default function Dashboard() {
   const [restaurantPick, setRestaurantPick] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
+  const [stravaPage, setStravaPage] = useState(0);
+  const STRAVA_PAGE_SIZE = 5;
   const [briefing, setBriefing] = useState(null);
   const [weatherNarrative, setWeatherNarrative] = useState(null);
   const [stockDigest, setStockDigest] = useState(null);
@@ -684,26 +687,28 @@ export default function Dashboard() {
             case 'weather': return (
               <Box key="weather">
                 <SectionHeader badge="Weather" badgeColor="blue" title={locationLabel} dragHandle={dh} />
-                <SimpleGrid cols={{ base: 3, xs: 5 }} mb="md">
-                  <Card withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
-                    <Text size="xs" c="dimmed" mb={2}>Today</Text>
-                    <Text size="xs" c="dimmed" mb={2}>{weather ? (WMO_CODES[weather.code] || "Clear") : ""}</Text>
-                    <Text size="sm" fw={700}>{weather ? `${weather.temp}°F` : "..."}</Text>
-                    <Text size="xs" c="dimmed">{weather?.lo != null ? `${weather.lo}°` : ""}</Text>
-                    <Text size="xs" c="blue.5" mt={2}>{weather?.rain != null ? `${weather.rain}%` : ""}</Text>
-                    <Text size="xs" c="dimmed">{weather?.wind != null ? `${weather.wind} mph` : ""}</Text>
-                  </Card>
-                  {(weather?.daily || [{},{},{},{}]).map((d, i) => (
-                    <Card key={d.day || i} withBorder p="xs" radius="md" style={{ textAlign: "center" }}>
-                      <Text size="xs" c="dimmed" mb={2}>{d.day || "..."}</Text>
-                      <Text size="xs" c="dimmed" mb={2}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</Text>
-                      <Text size="sm" fw={700}>{d.hi != null ? `${d.hi}°` : "..."}</Text>
-                      <Text size="xs" c="dimmed">{d.lo != null ? `${d.lo}°` : ""}</Text>
-                      <Text size="xs" c="blue.5" mt={2}>{d.rain != null ? `${d.rain}%` : ""}</Text>
-                      <Text size="xs" c="dimmed">{d.wind != null ? `${d.wind} mph` : ""}</Text>
-                    </Card>
+                <SectionCard mb="md">
+                  {[
+                    { label: "Today", code: weather?.code, temp: weather?.temp != null ? `${weather.temp}°F` : "...", lo: weather?.lo, rain: weather?.rain, wind: weather?.wind },
+                    ...(weather?.daily || []).map(d => ({ label: d.day || "...", code: d.code, temp: d.hi != null ? `${d.hi}°` : "...", lo: d.lo, rain: d.rain, wind: d.wind }))
+                  ].map((d, i, arr) => (
+                    <Group key={i} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                      <Group gap="sm" wrap="nowrap" style={{ minWidth: 80 }}>
+                        <Text size="lg" style={{ lineHeight: 1 }}>{d.code != null ? (WMO_ICONS[d.code] || "☀️") : "—"}</Text>
+                        <Box>
+                          <Text size="xs" fw={600}>{d.label}</Text>
+                          <Text size="xs" c="dimmed" style={{ fontSize: 10 }}>{d.code != null ? (WMO_CODES[d.code] || "Clear") : ""}</Text>
+                        </Box>
+                      </Group>
+                      <Group gap="md" wrap="nowrap">
+                        <Text size="sm" fw={700}>{d.temp}</Text>
+                        {d.lo != null && <Text size="xs" c="dimmed">↓{d.lo}°</Text>}
+                        {d.rain != null && <Text size="xs" c="blue.4">{d.rain}%</Text>}
+                        {d.wind != null && <Text size="xs" c="dimmed">{d.wind}mph</Text>}
+                      </Group>
+                    </Group>
                   ))}
-                </SimpleGrid>
+                </SectionCard>
                 {weatherNarrative && <Text size="xs" c="dimmed" mb="md" fs="italic">{weatherNarrative}</Text>}
               </Box>
             );
@@ -797,18 +802,21 @@ export default function Dashboard() {
                 <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity" dragHandle={dh}
                   right={strava ? (() => {
                     const totalCal = strava.activities.reduce((sum, a) => sum + (a.calories || 0), 0);
+                    const totalPages = Math.ceil(strava.activities.length / STRAVA_PAGE_SIZE);
                     return (
                       <Group gap="xs">
-                        <Text size="xs" c="dimmed">{strava.weeklyCount} session{strava.weeklyCount !== 1 ? "s" : ""} this week</Text>
-                        {totalCal > 0 && <Text size="xs" c="orange">{totalCal.toLocaleString()} cal total</Text>}
+                        {totalCal > 0 && <Text size="xs" c="orange">{totalCal.toLocaleString()} cal</Text>}
+                        <Text size="xs" c="dimmed">{strava.weeklyCount} this week</Text>
+                        <ActionIcon size="sm" variant="default" disabled={stravaPage === 0} onClick={() => setStravaPage(p => p - 1)}>‹</ActionIcon>
+                        <ActionIcon size="sm" variant="default" disabled={stravaPage >= totalPages - 1} onClick={() => setStravaPage(p => p + 1)}>›</ActionIcon>
                       </Group>
                     );
                   })() : null}
                 />
                 {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
-                  {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} />}
+                  {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} />}
                   <SectionCard mb="md">
-                    {strava.activities.map((a, i, arr) => (
+                    {strava.activities.slice(stravaPage * STRAVA_PAGE_SIZE, (stravaPage + 1) * STRAVA_PAGE_SIZE).map((a, i, arr) => (
                       <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                         <Group gap="xs" wrap="nowrap">
                           <Text size="md">{a.emoji}</Text>

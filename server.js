@@ -938,7 +938,8 @@ app.get("/api/strava", async (req, res) => {
         if (!parts) return sum;
         return sum + (parts[1] ? parseInt(parts[1]) * 60 + parseInt(parts[2]) : parseInt(parts[3]));
       }, 0);
-      chartDays.push({ day: label, mins: mins || null });
+      const cal = dayActivities.reduce((sum, a) => sum + (a.calories || 0), 0);
+      chartDays.push({ day: label, mins: mins || null, cal: cal || null });
     }
 
     cachedStrava = { activities: result, weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };

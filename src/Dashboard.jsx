@@ -21,12 +21,8 @@ const CONFIG = {
   EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
   NEWS_API: "https://hoboken-dashboard-production.up.railway.app/api/news",
   SPORTS_API: "https://hoboken-dashboard-production.up.railway.app/api/sports",
-  BRIEFING_API: "https://hoboken-dashboard-production.up.railway.app/api/briefing",
   WEATHER_NARRATIVE_API: "https://hoboken-dashboard-production.up.railway.app/api/weather-narrative",
-  STOCK_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/stock-digest",
   SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
-  EVENT_PICKS_API: "https://hoboken-dashboard-production.up.railway.app/api/event-picks",
-  NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
   ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
   STRAVA_API: "https://hoboken-dashboard-production.up.railway.app/api/strava",
   RESTAURANT_PICK_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurant-pick",
@@ -250,16 +246,12 @@ export default function Dashboard() {
   const [stravaPage, setStravaPage] = useState(0);
   const [stockSort, setStockSort] = useState({ col: 'rank', dir: 'asc' });
   const STRAVA_PAGE_SIZE = 5;
-  const [briefing, setBriefing] = useState(null);
   const [weatherNarrative, setWeatherNarrative] = useState(null);
-  const [stockDigest, setStockDigest] = useState(null);
   const [news, setNews] = useState([]);
   const [sports, setSports] = useState({});
   const [sportsLeague, setSportsLeague] = useState("nba");
   const [refreshCount, setRefreshCount] = useState(0);
   const [sportsRecap, setSportsRecap] = useState(null);
-  const [eventPicks, setEventPicks] = useState(null);
-  const [newsDigest, setNewsDigest] = useState(null);
   const [strava, setStrava] = useState(null);
   const [newsCategory, setNewsCategory] = useState("All");
   const [askQuery, setAskQuery] = useState("");
@@ -387,15 +379,6 @@ export default function Dashboard() {
     } catch (e) { console.error("News fetch failed:", e); }
   }, []);
 
-  const fetchBriefing = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.BRIEFING_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setBriefing(data);
-    } catch (e) { console.error("Briefing fetch failed:", e); }
-  }, []);
-
   const fetchWeatherNarrative = useCallback(async () => {
     const { lat, lon } = coordsRef.current;
     try {
@@ -404,15 +387,6 @@ export default function Dashboard() {
       const data = await res.json();
       if (data.text) setWeatherNarrative(data.text);
     } catch (e) { console.error("Weather narrative fetch failed:", e); }
-  }, []);
-
-  const fetchStockDigest = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.STOCK_DIGEST_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setStockDigest(data.text);
-    } catch (e) { console.error("Stock digest fetch failed:", e); }
   }, []);
 
   const fetchEvents = useCallback(async () => {
@@ -442,24 +416,6 @@ export default function Dashboard() {
     } catch (e) { console.error("Sports recap fetch failed:", e); }
   }, []);
 
-  const fetchEventPicks = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.EVENT_PICKS_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setEventPicks(data.text);
-    } catch (e) { console.error("Event picks fetch failed:", e); }
-  }, []);
-
-  const fetchNewsDigest = useCallback(async () => {
-    try {
-      const res = await fetch(CONFIG.NEWS_DIGEST_API);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data.text) setNewsDigest(data.text);
-    } catch (e) { console.error("News digest fetch failed:", e); }
-  }, []);
-
   const fetchStrava = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.STRAVA_API);
@@ -471,18 +427,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
-    fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
-    fetchWeatherNarrative(); fetchStockDigest();
-    fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
+    fetchEvents(); fetchNews(); fetchSports();
+    fetchWeatherNarrative(); fetchSportsRecap();
     fetchStrava(); fetchRestaurantPick();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
-      fetchWeatherNarrative(); fetchStockDigest();
-      fetchSportsRecap(); fetchStrava();
+      fetchWeatherNarrative(); fetchSportsRecap(); fetchStrava();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchStrava, fetchRestaurantPick]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -666,21 +620,6 @@ export default function Dashboard() {
         )}
       </Paper>
 
-      {/* DAILY BRIEFING */}
-      {briefing && (
-        <Paper withBorder p="md" mb="md" radius="md">
-          <Group gap="xs" mb="xs">
-            <Badge color="violet" variant="light" size="sm" radius="sm">AI</Badge>
-            <Text size="sm" fw={500}>Daily Briefing</Text>
-            <Text size="xs" c="dimmed" ml="auto">
-              {new Date(briefing.generatedAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </Text>
-          </Group>
-          <Text size="sm" c="dimmed" lh={1.6}>{briefing.text}</Text>
-        </Paper>
-      )}
-
-
       {/* TWO-COLUMN GRID */}
       {(() => {
         const renderSection = (id, dh) => {
@@ -779,7 +718,6 @@ export default function Dashboard() {
                 <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" dragHandle={dh}
                   right={<SegmentedControl size="xs" value={newsCategory} onChange={setNewsCategory} data={["All", "World", "Business", "Tech", "NYC"]} />}
                 />
-                {newsDigest && <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>}
                 <SectionCard mb="md">
                   {(() => {
                     const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
@@ -840,7 +778,6 @@ export default function Dashboard() {
                 <SectionHeader badge="Stocks" badgeColor="green" title="Top 100 Stocks" dragHandle={dh}
                   right={<Group gap="xs"><Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
-                {stockDigest && <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>}
                 <SectionCard>
                   {(() => {
                     const thStyle = (col) => ({
@@ -921,7 +858,6 @@ export default function Dashboard() {
                 <SectionHeader badge="Events" badgeColor="violet" title="NYC This Week" dragHandle={dh}
                   right={<Group gap="xs"><Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text><ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
-                {eventPicks && <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>}
                 <SectionCard mb="md">
                   {events.length === 0 ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
                     : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {

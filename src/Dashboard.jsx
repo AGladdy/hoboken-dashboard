@@ -24,6 +24,7 @@ const CONFIG = {
   NEWS_DIGEST_API: "https://hoboken-dashboard-production.up.railway.app/api/news-digest",
   ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
   STRAVA_API: "https://hoboken-dashboard-production.up.railway.app/api/strava",
+  RESTAURANT_PICK_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurant-pick",
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
 };
@@ -219,6 +220,8 @@ export default function Dashboard() {
   const [stockPage, setStockPage] = useState(0);
   const [restaurants, setRestaurants] = useState([]);
   const [restaurantIdx, setRestaurantIdx] = useState(0);
+  const [restaurantArea, setRestaurantArea] = useState("Hoboken");
+  const [restaurantPick, setRestaurantPick] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
   const [briefing, setBriefing] = useState(null);
@@ -324,6 +327,15 @@ export default function Dashboard() {
     } catch (e) { console.error("Restaurant fetch failed:", e); }
   }, []);
 
+  const fetchRestaurantPick = useCallback(async () => {
+    try {
+      const res = await fetch(CONFIG.RESTAURANT_PICK_API);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (data.text) setRestaurantPick(data.text);
+    } catch (e) { console.error("Restaurant pick fetch failed:", e); }
+  }, []);
+
   const fetchNews = useCallback(async () => {
     try {
       const res = await fetch(CONFIG.NEWS_API);
@@ -420,7 +432,7 @@ export default function Dashboard() {
     fetchEvents(); fetchBriefing(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchStockDigest();
     fetchSportsRecap(); fetchEventPicks(); fetchNewsDigest();
-    fetchStrava();
+    fetchStrava(); fetchRestaurantPick();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchStockDigest();
@@ -428,7 +440,7 @@ export default function Dashboard() {
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchStrava]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchBriefing, fetchNews, fetchSports, fetchWeatherNarrative, fetchStockDigest, fetchSportsRecap, fetchEventPicks, fetchNewsDigest, fetchStrava, fetchRestaurantPick]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -863,39 +875,53 @@ export default function Dashboard() {
           <Divider mb="md" />
 
           {/* RESTAURANT */}
-          {(() => {
-            const r = restaurants[restaurantIdx];
-            if (!r) return null;
-            return (
-              <Box mb="md">
-                <SectionHeader
-                  badge="Eat" badgeColor="orange"
-                  title="Restaurant of the Day"
-                  right={
-                    <Button size="xs" variant="default" onClick={() => setRestaurantIdx(i => (i + 1) % restaurants.length)}>
-                      Next →
-                    </Button>
-                  }
-                />
-                <Card withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
-                  <Group wrap="nowrap" align="stretch" gap={0}>
-                    {r.photo && <img src={r.photo} alt={r.name} style={{ width: 110, objectFit: "cover", flexShrink: 0 }} />}
-                    <Box p="sm" style={{ flex: 1 }}>
-                      <Group gap="xs" mb={4}>
-                        <Text size="sm" fw={600}>{r.name}</Text>
-                        <Badge size="xs" variant="outline">{r.area}</Badge>
-                      </Group>
-                      <Text size="xs" c="dimmed" mb={4}>
-                        {r.category}{r.price ? " · " + "$".repeat(r.price) : ""}{r.rating ? ` · ★ ${r.rating.toFixed(1)}` : ""}
-                      </Text>
-                      <Text size="xs" c="dimmed">{r.address}</Text>
-                      {r.website && <Anchor href={r.website} target="_blank" size="xs" mt={4} display="block">Website →</Anchor>}
-                    </Box>
-                  </Group>
-                </Card>
-              </Box>
-            );
-          })()}
+          {restaurants.length > 0 && (
+            <Box mb="md">
+              <SectionHeader
+                badge="Eat" badgeColor="orange"
+                title="Where to Eat"
+                right={
+                  <SegmentedControl
+                    size="xs"
+                    value={restaurantArea}
+                    onChange={setRestaurantArea}
+                    data={["Hoboken", "Manhattan"]}
+                  />
+                }
+              />
+              {restaurantPick && (
+                <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>
+              )}
+              <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
+                {restaurants
+                  .filter(r => r.area === restaurantArea)
+                  .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+                  .slice(0, 6)
+                  .map((r, i) => (
+                    <Card key={i} withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
+                      {r.photo && (
+                        <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />
+                      )}
+                      <Box p="sm">
+                        <Group justify="space-between" mb={4} wrap="nowrap">
+                          <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>
+                          {r.rating && (
+                            <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>
+                          )}
+                        </Group>
+                        <Group gap="xs" mb={4}>
+                          <Badge size="xs" variant="light" color="orange">{r.category}</Badge>
+                          {r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}
+                        </Group>
+                        <Text size="xs" c="dimmed" truncate mb={4}>{r.address}</Text>
+                        {r.website && <Anchor href={r.website} target="_blank" size="xs">Visit →</Anchor>}
+                      </Box>
+                    </Card>
+                  ))
+                }
+              </SimpleGrid>
+            </Box>
+          )}
 
           <Divider mb="md" />
 

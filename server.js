@@ -593,6 +593,49 @@ Plain text only, no markdown.`;
   }
 });
 
+let cachedRestaurantPick = null;
+let lastRestaurantPickFetch = 0;
+
+app.get("/api/restaurant-pick", async (req, res) => {
+  const now = Date.now();
+  if (cachedRestaurantPick && now - lastRestaurantPickFetch < 10800000) return res.json(cachedRestaurantPick);
+  if (!cachedRestaurants || cachedRestaurants.length === 0) return res.json({ text: "" });
+
+  try {
+    const hour = new Date().toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false });
+    const timeOfDay = parseInt(hour) < 12 ? "morning" : parseInt(hour) < 17 ? "afternoon" : "evening";
+    const weatherRes = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode&temperature_unit=fahrenheit&timezone=America/New_York").then(r => r.json()).catch(() => ({}));
+    const temp = weatherRes?.current?.temperature_2m;
+
+    const picks = cachedRestaurants
+      .filter(r => r.rating)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 20)
+      .map(r => `${r.name} | ${r.area} | ${r.category} | ${r.price ? "$".repeat(r.price) : "?"} | ★${r.rating?.toFixed(1)}`);
+
+    const prompt = `You are a local food expert. Based on the time of day and weather, recommend 1 specific restaurant from the list below in a single enthusiastic sentence. Include the restaurant name and why it fits right now.
+
+Time: ${timeOfDay}, ${temp != null ? temp + "°F" : "unknown temp"}
+Restaurants (name | area | category | price | rating):
+${picks.join("\n")}
+
+Plain text only, no markdown.`;
+
+    const message = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 80,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    cachedRestaurantPick = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastRestaurantPickFetch = now;
+    res.json(cachedRestaurantPick);
+  } catch (e) {
+    console.error("Restaurant pick failed:", e.message);
+    res.json(cachedRestaurantPick || { text: "" });
+  }
+});
+
 let cachedEventPicks = null;
 let lastEventPicksFetch = 0;
 

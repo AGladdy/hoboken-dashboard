@@ -788,59 +788,115 @@ Plain text only, no markdown.`;
 });
 
 app.post("/api/ask", async (req, res) => {
-  const { query } = req.body || {};
+  const { query, history = [] } = req.body || {};
   if (!query || !query.trim()) return res.status(400).json({ error: "query required" });
 
   try {
     const [pathData, weatherRes] = await Promise.all([
       fetchPathData().catch(() => ({ results: [] })),
-      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=1").then(r => r.json()).catch(() => ({})),
+      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=3").then(r => r.json()).catch(() => ({})),
     ]);
 
+    // PATH trains
     const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
     const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
-    const nextTrain = toNYMsgs[0]
-      ? `${toNYMsgs[0].headSign} in ${Math.round(parseInt(toNYMsgs[0].secondsToArrival, 10) / 60)} min`
-      : "no PATH data";
+    const toNJMsgs = hob?.destinations?.find(d => d.label === "ToNJ")?.messages || [];
+    const pathToNY = toNYMsgs.slice(0, 3).map(m => `${m.headSign} in ${Math.round(parseInt(m.secondsToArrival, 10) / 60)} min`).join("; ") || "none";
+    const pathToNJ = toNJMsgs.slice(0, 2).map(m => `${m.headSign} in ${Math.round(parseInt(m.secondsToArrival, 10) / 60)} min`).join("; ") || "none";
 
+    // Weather
     const temp = weatherRes?.current?.temperature_2m;
+    const wind = weatherRes?.current?.windspeed_10m;
     const hiTemp = weatherRes?.daily?.temperature_2m_max?.[0];
     const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
-    const condCode = weatherRes?.current?.weathercode;
+    const rainPct = weatherRes?.daily?.precipitation_probability_max?.[0];
+    const tomorrowHi = weatherRes?.daily?.temperature_2m_max?.[1];
+    const tomorrowRain = weatherRes?.daily?.precipitation_probability_max?.[1];
 
-    const topStocks = (cachedStocksMap['1mo'] || [])
-      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
-      .slice(0, 5)
-      .map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(1)}%`)
-      .join(", ");
+    // Stocks
+    const stocks1mo = cachedStocksMap['1mo'] || [];
+    const topMovers = [...stocks1mo].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 10)
+      .map(s => `${s.symbol} ${s.pct >= 0 ? "+" : ""}${s.pct.toFixed(1)}%`).join(", ");
+    const topGainers = [...stocks1mo].sort((a, b) => b.pct - a.pct).slice(0, 5)
+      .map(s => `${s.symbol} +${s.pct.toFixed(1)}%`).join(", ");
+    const topLosers = [...stocks1mo].sort((a, b) => a.pct - b.pct).slice(0, 5)
+      .map(s => `${s.symbol} ${s.pct.toFixed(1)}%`).join(", ");
 
+    // Events
     const todayStr = new Date().toISOString().split("T")[0];
-    const todayEvents = (cachedEvents || [])
-      .filter(e => e.date === todayStr)
-      .slice(0, 3)
-      .map(e => `${e.name}${e.time ? " at " + e.time : ""}`);
+    const upcomingEvents = (cachedEvents || [])
+      .filter(e => e.date >= todayStr)
+      .slice(0, 10)
+      .map(e => `${e.name} on ${e.date}${e.time ? " at " + e.time : ""}${e.venue ? " @ " + e.venue : ""}${e.priceMin ? " from $" + Math.round(e.priceMin) : ""}`);
 
-    const topRestaurants = (cachedRestaurants || [])
+    // Restaurants
+    const restaurants = (cachedRestaurants || [])
       .filter(r => r.rating)
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-      .slice(0, 3)
-      .map(r => `${r.name} (${r.category})`);
+      .slice(0, 10)
+      .map(r => `${r.name} (${r.category}, ${r.location}, ${r.rating}★)`);
 
-    const systemPrompt = `You are a personal assistant for someone in Hoboken, NJ. Be concise and direct — 1-3 sentences max. Use web search when the question needs current information (news, sports scores, restaurant info, weather, events, etc.). Use the dashboard data below for transit and local context.
+    // News
+    const newsHeadlines = (cachedNews || []).slice(0, 15)
+      .map(n => `[${n.category}] ${n.title} (${n.source})`);
 
-Dashboard data:
-- Weather: ${temp != null ? temp + "°F" : "unknown"}, high ${hiTemp != null ? hiTemp + "°F" : "unknown"} / low ${loTemp != null ? loTemp + "°F" : "unknown"}
-- Next PATH to NYC: ${nextTrain}
-- Top stock movers: ${topStocks || "no data"}
-- Today's events: ${todayEvents.length > 0 ? todayEvents.join("; ") : "none found"}
-- Restaurant picks: ${topRestaurants.length > 0 ? topRestaurants.join("; ") : "none available"}`;
+    // Sports
+    const sportsCtx = Object.entries(cachedSports || {}).map(([key, data]) => {
+      const top5 = data.teams.slice(0, 5).map(t => `${t.name} ${t.wins}-${t.losses}`).join(", ");
+      const headlines = (data.news || []).slice(0, 2).map(h => h.headline).join("; ");
+      return `${data.label}: ${top5}${headlines ? " | News: " + headlines : ""}`;
+    }).join("\n");
+
+    // Strava
+    const stravaCtx = cachedStrava ? (() => {
+      const recent = (cachedStrava.activities || []).slice(0, 5)
+        .map(a => `${a.name} (${a.type}, ${(a.distance / 1000).toFixed(1)}km, ${Math.round(a.moving_time / 60)}min${a.calories ? ", " + a.calories + "cal" : ""})`).join("; ");
+      const totalCal = (cachedStrava.activities || []).reduce((s, a) => s + (a.calories || 0), 0);
+      return `Weekly workouts: ${cachedStrava.weeklyCount} | Recent: ${recent}${totalCal ? " | Total calories: " + totalCal : ""}`;
+    })() : "no data";
+
+    const systemPrompt = `You are Adam's personal assistant. Adam lives at 205 Hudson Street, Hoboken, NJ. Be helpful and thorough — 5-10 sentences when useful, shorter for simple questions. Use web search for anything needing current information. Reference the dashboard data below directly when relevant.
+
+=== LIVE DASHBOARD DATA ===
+
+WEATHER (Hoboken, NJ):
+- Now: ${temp != null ? temp + "°F" : "unknown"}, wind ${wind != null ? wind + " mph" : "unknown"}
+- Today: High ${hiTemp != null ? hiTemp + "°F" : "?"} / Low ${loTemp != null ? loTemp + "°F" : "?"}, rain ${rainPct != null ? rainPct + "%" : "?"}
+- Tomorrow: High ${tomorrowHi != null ? tomorrowHi + "°F" : "?"}, rain ${tomorrowRain != null ? tomorrowRain + "%" : "?"}
+
+PATH TRAINS (Hoboken Terminal):
+- To NYC: ${pathToNY}
+- To NJ: ${pathToNJ}
+
+STOCKS (top movers): ${topMovers || "no data"}
+- Gainers: ${topGainers}
+- Losers: ${topLosers}
+
+UPCOMING EVENTS:
+${upcomingEvents.length > 0 ? upcomingEvents.join("\n") : "none found"}
+
+RESTAURANTS (top-rated nearby):
+${restaurants.length > 0 ? restaurants.join("\n") : "none available"}
+
+NEWS HEADLINES:
+${newsHeadlines.length > 0 ? newsHeadlines.join("\n") : "no news loaded"}
+
+SPORTS STANDINGS:
+${sportsCtx || "no data"}
+
+FITNESS (Strava): ${stravaCtx}`;
+
+    const messages = [
+      ...history.map(h => ({ role: h.role, content: h.content })),
+      { role: "user", content: query },
+    ];
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [{ role: "user", content: query }],
+      messages,
     });
 
     const textBlock = message.content.filter(b => b.type === "text").pop();

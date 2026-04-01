@@ -258,6 +258,7 @@ export default function Dashboard() {
   const [newsCategory, setNewsCategory] = useState("All");
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
+  const [askHistory, setAskHistory] = useState([]);
   const [askLoading, setAskLoading] = useState(false);
   const [askDots, setAskDots] = useState('');
   const [askCount, setAskCount] = useState(0);
@@ -590,6 +591,7 @@ export default function Dashboard() {
             e.preventDefault();
             if (!askQuery.trim() || askLoading) return;
             const newCount = askCount + 1;
+            const currentQuery = askQuery;
             setAskLoading(true);
             setAskAnswer(null);
             setAskCount(newCount);
@@ -598,10 +600,12 @@ export default function Dashboard() {
               const res = await fetch(CONFIG.ASK_API, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: askQuery }),
+                body: JSON.stringify({ query: currentQuery, history: askHistory }),
               });
               const data = await res.json();
-              setAskAnswer(data.answer || "");
+              const answer = data.answer || "";
+              setAskAnswer(answer);
+              setAskHistory(h => [...h, { role: "user", content: currentQuery }, { role: "assistant", content: answer }]);
             } catch { setAskAnswer("Something went wrong."); }
             finally {
               setAskLoading(false);

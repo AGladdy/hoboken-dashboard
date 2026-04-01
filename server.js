@@ -892,19 +892,30 @@ app.get("/api/strava", async (req, res) => {
 
     const typeEmoji = { Run: "🏃", Ride: "🚴", Swim: "🏊", Walk: "🚶", Hike: "🥾", Workout: "💪" };
 
-    const result = (Array.isArray(activities) ? activities : []).map(a => ({
-      id: a.id,
-      name: a.name,
-      type: a.sport_type || a.type,
-      emoji: typeEmoji[a.sport_type || a.type] || "🏅",
-      date: a.start_date_local?.split("T")[0],
-      distance: a.distance > 0 ? fmt(a.distance) : null,
-      duration: fmtDuration(a.moving_time),
-      pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
-      elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
-      heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
-      calories: a.calories ? Math.round(a.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
-    }));
+    const top10 = (Array.isArray(activities) ? activities : []).slice(0, 10);
+
+    // Fetch detail for each activity to get calories (list endpoint doesn't include it)
+    const details = await Promise.all(top10.map(a =>
+      fetch(`https://www.strava.com/api/v3/activities/${a.id}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).catch(() => ({}))
+    ));
+
+    const result = top10.map((a, i) => {
+      const detail = details[i] || {};
+      return {
+        id: a.id,
+        name: a.name,
+        type: a.sport_type || a.type,
+        emoji: typeEmoji[a.sport_type || a.type] || "🏅",
+        date: a.start_date_local?.split("T")[0],
+        distance: a.distance > 0 ? fmt(a.distance) : null,
+        duration: fmtDuration(a.moving_time),
+        pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
+        elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
+        heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
+        calories: detail.calories ? Math.round(detail.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
+      };
+    });
 
     // Weekly summary (last 7 days rolling)
     const sevenDaysAgo = new Date();

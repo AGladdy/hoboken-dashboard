@@ -739,7 +739,7 @@ export default function Dashboard() {
                           <Badge size="xs" variant="light" color="blue" style={{ width: "100%", justifyContent: "center" }}>{item.category || "News"}</Badge>
                           <Badge size="xs" variant="outline" color="gray" style={{ width: "100%", justifyContent: "center" }}>{item.source}</Badge>
                         </Stack>
-                        <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never" style={{ flex: 1, lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{item.title}</Anchor>
+                        <Anchor href={item.link} target="_blank" c="var(--mantine-color-text)" underline="never" style={{ flex: 1, lineHeight: 1.4, fontSize: "clamp(11px, 1.8vw, 14px)" }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{item.title}</Anchor>
                         {item.pubDate && <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</Text>}
                       </Group>
                     ));

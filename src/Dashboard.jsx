@@ -248,6 +248,7 @@ export default function Dashboard() {
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
   const [stravaPage, setStravaPage] = useState(0);
+  const [stockSort, setStockSort] = useState({ col: 'rank', dir: 'asc' });
   const STRAVA_PAGE_SIZE = 5;
   const [briefing, setBriefing] = useState(null);
   const [weatherNarrative, setWeatherNarrative] = useState(null);
@@ -841,16 +842,43 @@ export default function Dashboard() {
                 />
                 {stockDigest && <Text size="xs" c="dimmed" mb="xs" fs="italic">{stockDigest}</Text>}
                 <SectionCard>
-                  <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
-                    <Table.Thead><Table.Tr><Table.Th w={32} style={{ fontSize: 11 }}>#</Table.Th><Table.Th style={{ fontSize: 11 }}>Symbol</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }}>Price</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }}>Change</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th></Table.Tr></Table.Thead>
-                    <Table.Tbody>
-                      {stocks.length === 0 ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
-                        : stocks.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
-                          const pos = s.pct >= 0;
-                          return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ textAlign: "right" }} visibleFrom="xs"><Sparkline data={s.sparkline} positive={pos} /></Table.Td></Table.Tr>;
-                        })}
-                    </Table.Tbody>
-                  </Table>
+                  {(() => {
+                    const thStyle = (col) => ({
+                      fontSize: 11, cursor: "pointer", userSelect: "none",
+                      color: stockSort.col === col ? "var(--mantine-color-blue-4)" : undefined,
+                    });
+                    const arrow = (col) => stockSort.col === col ? (stockSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+                    const toggle = (col) => setStockSort(s => ({ col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' }));
+                    const sorted = [...stocks].sort((a, b) => {
+                      const d = stockSort.dir === 'asc' ? 1 : -1;
+                      if (stockSort.col === 'rank') return (a.rank - b.rank) * d;
+                      if (stockSort.col === 'symbol') return a.symbol.localeCompare(b.symbol) * d;
+                      if (stockSort.col === 'price') return (a.price - b.price) * d;
+                      if (stockSort.col === 'pct') return (a.pct - b.pct) * d;
+                      return 0;
+                    });
+                    return (
+                      <Table striped={false} highlightOnHover verticalSpacing={6} horizontalSpacing="sm">
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th w={32} style={thStyle('rank')} onClick={() => toggle('rank')}>#{ arrow('rank')}</Table.Th>
+                            <Table.Th style={thStyle('symbol')} onClick={() => toggle('symbol')}>Symbol{arrow('symbol')}</Table.Th>
+                            <Table.Th style={{ ...thStyle('price'), textAlign: "right" }} onClick={() => toggle('price')}>Price{arrow('price')}</Table.Th>
+                            <Table.Th style={{ ...thStyle('pct'), textAlign: "right" }} onClick={() => toggle('pct')}>Change{arrow('pct')}</Table.Th>
+                            <Table.Th style={{ fontSize: 11, textAlign: "right" }} visibleFrom="xs">5d</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {sorted.length === 0
+                            ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
+                            : sorted.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
+                              const pos = s.pct >= 0;
+                              return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ textAlign: "right" }} visibleFrom="xs"><Sparkline data={s.sparkline} positive={pos} /></Table.Td></Table.Tr>;
+                            })}
+                        </Table.Tbody>
+                      </Table>
+                    );
+                  })()}
                 </SectionCard>
               </Box>
             );

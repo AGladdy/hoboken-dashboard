@@ -505,8 +505,8 @@ export default function Dashboard() {
   // Hero bar values
   const heroPath = (() => {
     const train = pathLive
-      ? pathTrains.toNY.find(t => t.headsign === "33rd Street")
-      : estTrains.find(t => t.headsign === "33rd Street");
+      ? pathTrains.toNY.find(t => t.headsign?.includes("33rd Street"))
+      : estTrains.find(t => t.headsign?.includes("33rd Street"));
     if (!train) return { value: "—", sub: "No trains", color: "gray" };
     const { mins, display } = pathLive
       ? calcLiveCountdown(train, pathTrains.fetchedAt, now)
@@ -836,6 +836,16 @@ export default function Dashboard() {
                 {sportsRecap && <Text size="xs" c="dimmed" mt="xs" mb="xs" fs="italic">{sportsRecap}</Text>}
                 {!sportsGroups ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
                   <Box mb="md">
+                    {sports[sportsLeague]?.news?.length > 0 && (
+                      <SectionCard mb="md">
+                        {sports[sportsLeague].news.map((n, i) => (
+                          <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                            <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never" style={{ display: "block", lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{n.headline}</Anchor>
+                            {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
+                          </Box>
+                        ))}
+                      </SectionCard>
+                    )}
                     <SectionCard mb="sm">
                       <Table verticalSpacing={6} horizontalSpacing="sm">
                         <Table.Thead><Table.Tr><Table.Th style={{ fontSize: 11 }}>Team</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>W</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 36 }}>L</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 56 }}>PCT</Table.Th><Table.Th style={{ fontSize: 11, textAlign: "center", width: 46 }}>GB</Table.Th></Table.Tr></Table.Thead>
@@ -847,17 +857,8 @@ export default function Dashboard() {
                         </Table.Tbody>
                       </Table>
                     </SectionCard>
-                    {sports[sportsLeague]?.news?.length > 0 && (
-                      <SectionCard mb="md">
-                        {sports[sportsLeague].news.map((n, i) => (
-                          <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                            <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never" style={{ display: "block", lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{n.headline}</Anchor>
-                            {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
-                          </Box>
-                        ))}
-                      </SectionCard>
-                    )}
                   </Box>
+                  
                 )}
               </Box>
             );
@@ -911,19 +912,34 @@ export default function Dashboard() {
           }
         };
 
-        const handleDragEnd = (setOrder, storageKey) => ({ active, over }) => {
+        const handleDragEnd = ({ active, over }) => {
           if (!over || active.id === over.id) return;
-          setOrder(prev => {
-            const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id));
-            localStorage.setItem(storageKey, JSON.stringify(next));
-            return next;
-          });
+          const inLeft = leftOrder.includes(active.id);
+          const overLeft = leftOrder.includes(over.id);
+          const inRight = rightOrder.includes(active.id);
+          const overRight = rightOrder.includes(over.id);
+
+          if (inLeft && overLeft) {
+            // reorder within left
+            setLeftOrder(prev => { const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id)); localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
+          } else if (inRight && overRight) {
+            // reorder within right
+            setRightOrder(prev => { const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id)); localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
+          } else if (inLeft && overRight) {
+            // move from left to right
+            setLeftOrder(prev => { const next = prev.filter(id => id !== active.id); localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
+            setRightOrder(prev => { const idx = prev.indexOf(over.id); const next = [...prev.slice(0, idx), active.id, ...prev.slice(idx)]; localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
+          } else if (inRight && overLeft) {
+            // move from right to left
+            setRightOrder(prev => { const next = prev.filter(id => id !== active.id); localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
+            setLeftOrder(prev => { const idx = prev.indexOf(over.id); const next = [...prev.slice(0, idx), active.id, ...prev.slice(idx)]; localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
+          }
         };
 
         return (
-          <Grid gutter="lg">
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd(setLeftOrder, 'gl_left_order')}>
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <Grid gutter="lg">
+              <Grid.Col span={{ base: 12, md: 6 }}>
                 <SortableContext items={leftOrder} strategy={verticalListSortingStrategy}>
                   {leftOrder.map((id, idx) => (
                     <SortableSection key={id} id={id}>
@@ -931,10 +947,8 @@ export default function Dashboard() {
                     </SortableSection>
                   ))}
                 </SortableContext>
-              </DndContext>
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd(setRightOrder, 'gl_right_order')}>
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 6 }}>
                 <SortableContext items={rightOrder} strategy={verticalListSortingStrategy}>
                   {rightOrder.map((id, idx) => (
                     <SortableSection key={id} id={id}>
@@ -942,9 +956,9 @@ export default function Dashboard() {
                     </SortableSection>
                   ))}
                 </SortableContext>
-              </DndContext>
-            </Grid.Col>
-          </Grid>
+              </Grid.Col>
+            </Grid>
+          </DndContext>
         );
       })()}
 

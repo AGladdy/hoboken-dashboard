@@ -497,7 +497,9 @@ export default function Dashboard() {
 
       {/* HEADER */}
       <Group justify="space-between" mb="md" wrap="nowrap" gap="xs">
-        <Text fw={700} size="lg" style={{ flexShrink: 0 }}>Gladdy's Life</Text>
+        <Text fw={700} size="lg" style={{ flexShrink: 0 }}>
+          {(() => { const h = now.getHours(); return h < 12 ? "Good morning, Adam" : h < 17 ? "Good afternoon, Adam" : "Good evening, Adam"; })()}
+        </Text>
         <Group gap="xs" wrap="nowrap" justify="flex-end">
           <Text size="sm" c="dimmed" ff="monospace" visibleFrom="sm">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}

@@ -496,10 +496,10 @@ export default function Dashboard() {
     <Box bg={dark ? "var(--mantine-color-dark-8)" : "var(--mantine-color-gray-1)"} mih="100vh" p="md">
 
       {/* HEADER */}
-      <Group justify="space-between" mb="md" wrap="wrap" gap="xs">
-        <Text fw={700} size="lg">Gladdy's Life</Text>
-        <Group gap="sm" wrap="wrap">
-          <Text size="sm" c="dimmed" ff="monospace">
+      <Group justify="space-between" mb="md" wrap="nowrap" gap="xs">
+        <Text fw={700} size="lg" style={{ flexShrink: 0 }}>Gladdy's Life</Text>
+        <Group gap="xs" wrap="nowrap" justify="flex-end">
+          <Text size="sm" c="dimmed" ff="monospace" visibleFrom="sm">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
           </Text>
           <Button
@@ -515,7 +515,7 @@ export default function Dashboard() {
             size="xs" variant="default"
             onClick={() => setColorScheme(dark ? "light" : "dark")}
           >
-            {dark ? "☀️ Light" : "🌙 Dark"}
+            {dark ? "☀️" : "🌙"}
           </Button>
         </Group>
       </Group>

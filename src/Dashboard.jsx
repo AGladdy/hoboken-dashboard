@@ -624,6 +624,7 @@ export default function Dashboard() {
             setAskLoading(true);
             setAskAnswer(null);
             setAskCount(newCount);
+            setAskQuery("");
             try {
               const res = await fetch(CONFIG.ASK_API, {
                 method: "POST",

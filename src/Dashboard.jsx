@@ -779,9 +779,9 @@ export default function Dashboard() {
                     if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
                     return filtered.slice(0, 15).map((item, i, arr) => (
                       <Group key={i} p="xs" gap="sm" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                        <Stack gap={4} style={{ flexShrink: 0, minWidth: 60 }}>
-                          <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
-                          <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
+                        <Stack gap={4} style={{ flexShrink: 0, width: 72 }}>
+                          <Badge size="xs" variant="light" color="blue" style={{ width: "100%", justifyContent: "center" }}>{item.category || "News"}</Badge>
+                          <Badge size="xs" variant="outline" color="gray" style={{ width: "100%", justifyContent: "center" }}>{item.source}</Badge>
                         </Stack>
                         <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never" style={{ flex: 1, lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{item.title}</Anchor>
                         {item.pubDate && <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>{new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</Text>}

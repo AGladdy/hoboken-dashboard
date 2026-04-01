@@ -69,25 +69,32 @@ const TOP_100 = [
   "ICE","USB","SBUX","CME","WM","PH","GD","NOC","HCA","SOFI","PLTR",
 ];
 
-let cachedStocks = null;
-let lastStockFetch = 0;
+const STOCK_RANGE_CONFIG = {
+  '1d':  { interval: '5m',  range: '1d' },
+  '5d':  { interval: '1h',  range: '5d' },
+  '1mo': { interval: '1d',  range: '1mo' },
+  '1y':  { interval: '1wk', range: '1y' },
+};
+const cachedStocksMap = {};
+const lastStockFetchMap = {};
 
-async function fetchBatch(symbols) {
+async function fetchBatch(symbols, interval, range) {
   return Promise.all(symbols.map(sym =>
-    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } })
+    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=${interval}&range=${range}`, { headers: { "User-Agent": "Mozilla/5.0" } })
       .then(r => r.json())
       .catch(() => null)
   ));
 }
 
-async function fetchAndCacheStocks() {
+async function fetchAndCacheStocks(rangeKey = '1mo') {
+  const cfg = STOCK_RANGE_CONFIG[rangeKey] || STOCK_RANGE_CONFIG['1mo'];
   const now = Date.now();
-  if (cachedStocks && now - lastStockFetch < 300000) return;
+  if (cachedStocksMap[rangeKey] && now - (lastStockFetchMap[rangeKey] || 0) < 300000) return;
   try {
     const all = [];
     const batchSize = 10;
     for (let i = 0; i < TOP_100.length; i += batchSize) {
-      const batch = await fetchBatch(TOP_100.slice(i, i + batchSize));
+      const batch = await fetchBatch(TOP_100.slice(i, i + batchSize), cfg.interval, cfg.range);
       all.push(...batch);
       if (i + batchSize < TOP_100.length) await new Promise(r => setTimeout(r, 150));
     }
@@ -105,15 +112,16 @@ async function fetchAndCacheStocks() {
         sparkline: closes,
       };
     }).filter(Boolean);
-    if (result.length > 0) { cachedStocks = result; lastStockFetch = now; }
+    if (result.length > 0) { cachedStocksMap[rangeKey] = result; lastStockFetchMap[rangeKey] = now; }
   } catch (e) {
     console.error("Stock fetch failed:", e.message);
   }
 }
 
 app.get("/api/stocks", async (req, res) => {
-  await fetchAndCacheStocks();
-  res.json(cachedStocks || []);
+  const rangeKey = req.query.range || '1mo';
+  await fetchAndCacheStocks(rangeKey);
+  res.json(cachedStocksMap[rangeKey] || []);
 });
 
 const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;

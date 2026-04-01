@@ -245,6 +245,8 @@ export default function Dashboard() {
   const [eventPage, setEventPage] = useState(0);
   const [stravaPage, setStravaPage] = useState(0);
   const [stockSort, setStockSort] = useState({ col: 'rank', dir: 'asc' });
+  const [stockRange, setStockRange] = useState('1M');
+  const stockRangeRef = useRef('1M');
   const STRAVA_PAGE_SIZE = 5;
   const [weatherNarrative, setWeatherNarrative] = useState(null);
   const [news, setNews] = useState([]);
@@ -344,8 +346,9 @@ export default function Dashboard() {
   }, [fetchWeather]);
 
   const fetchStocks = useCallback(async () => {
+    const rangeKey = {'1D':'1d','1W':'5d','1M':'1mo','1Y':'1y'}[stockRangeRef.current] || '1mo';
     try {
-      const res = await fetch(CONFIG.STOCKS_API);
+      const res = await fetch(`${CONFIG.STOCKS_API}?range=${rangeKey}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.length > 0) setStocks(data);
@@ -437,6 +440,12 @@ export default function Dashboard() {
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
   }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick]);
+
+  useEffect(() => {
+    stockRangeRef.current = stockRange;
+    setStocks([]);
+    fetchStocks();
+  }, [stockRange, fetchStocks]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -738,7 +747,7 @@ export default function Dashboard() {
             );
              case 'strava': return (
               <Box key="strava">
-                <SectionHeader badge="Fitness" badgeColor="orange" title="Strava Activity" dragHandle={dh}
+                <SectionHeader badge="Fitness" badgeColor="orange" title="Recent Workouts" dragHandle={dh}
                   right={strava ? (() => {
                     const totalCal = strava.activities.reduce((sum, a) => sum + (a.calories || 0), 0);
                     const totalPages = Math.ceil(strava.activities.length / STRAVA_PAGE_SIZE);
@@ -776,7 +785,7 @@ export default function Dashboard() {
             case 'stocks': return (
               <Box key="stocks">
                 <SectionHeader badge="Stocks" badgeColor="green" title="Top 100 Stocks" dragHandle={dh}
-                  right={<Group gap="xs"><Text size="xs" c="dimmed">Page {stockPage + 1} / {Math.ceil(stocks.length / 10) || 10}</Text><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
+                  right={<Group gap="xs"><SegmentedControl size="xs" value={stockRange} onChange={setStockRange} data={['1D','1W','1M','1Y']} /><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
                 <SectionCard>
                   {(() => {
@@ -802,7 +811,7 @@ export default function Dashboard() {
                             <Table.Th style={thStyle('symbol')} onClick={() => toggle('symbol')}>Symbol{arrow('symbol')}</Table.Th>
                             <Table.Th style={{ ...thStyle('price'), textAlign: "right" }} onClick={() => toggle('price')}>Price{arrow('price')}</Table.Th>
                             <Table.Th style={{ ...thStyle('pct'), textAlign: "right" }} onClick={() => toggle('pct')}>Change{arrow('pct')}</Table.Th>
-                            <Table.Th style={{ fontSize: 11, width: "100%" }} visibleFrom="xs">14d</Table.Th>
+                            <Table.Th style={{ fontSize: 11, width: "100%" }} visibleFrom="xs">{stockRange}</Table.Th>
                           </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
@@ -810,7 +819,7 @@ export default function Dashboard() {
                             ? <Table.Tr><Table.Td colSpan={5}><Text size="sm" c="dimmed" p="sm">Loading...</Text></Table.Td></Table.Tr>
                             : sorted.slice(stockPage * 10, stockPage * 10 + 10).map((s) => {
                               const pos = s.pct >= 0;
-                              return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ width: "100%" }} visibleFrom="xs"><Sparkline data={s.sparkline?.slice(-14)} positive={pos} /></Table.Td></Table.Tr>;
+                              return <Table.Tr key={s.symbol}><Table.Td><Text size="xs" c="dimmed">{s.rank}</Text></Table.Td><Table.Td><Text size="sm" fw={600}>{s.symbol}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="sm" fw={500}>${s.price.toFixed(2)}</Text></Table.Td><Table.Td style={{ textAlign: "right" }}><Text size="xs" c={pos ? "green" : "red"}>{pos ? "+" : ""}{s.pct.toFixed(2)}%</Text></Table.Td><Table.Td style={{ width: "100%" }} visibleFrom="xs"><Sparkline data={s.sparkline} positive={pos} /></Table.Td></Table.Tr>;
                             })}
                         </Table.Tbody>
                       </Table>

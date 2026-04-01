@@ -772,24 +772,25 @@ app.post("/api/ask", async (req, res) => {
       .slice(0, 3)
       .map(r => `${r.name} (${r.category})`);
 
-    const prompt = `You are a personal assistant for someone in Hoboken, NJ. Answer their question using the real-time data below. Be concise and direct — 1-3 sentences max. If the data doesn't have enough info to answer, say so briefly.
+    const systemPrompt = `You are a personal assistant for someone in Hoboken, NJ. Be concise and direct — 1-3 sentences max. Use web search when the question needs current information (news, sports scores, restaurant info, weather, events, etc.). Use the dashboard data below for transit and local context.
 
-Current data:
-- Weather: ${temp != null ? temp + "°F" : "unknown"}, high ${hiTemp != null ? hiTemp + "°F" : "unknown"} / low ${loTemp != null ? loTemp + "°F" : "unknown"}${condCode != null ? ", code " + condCode : ""}
+Dashboard data:
+- Weather: ${temp != null ? temp + "°F" : "unknown"}, high ${hiTemp != null ? hiTemp + "°F" : "unknown"} / low ${loTemp != null ? loTemp + "°F" : "unknown"}
 - Next PATH to NYC: ${nextTrain}
 - Top stock movers: ${topStocks || "no data"}
 - Today's events: ${todayEvents.length > 0 ? todayEvents.join("; ") : "none found"}
-- Restaurant picks: ${topRestaurants.length > 0 ? topRestaurants.join("; ") : "none available"}
-
-User question: ${query}`;
+- Restaurant picks: ${topRestaurants.length > 0 ? topRestaurants.join("; ") : "none available"}`;
 
     const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 120,
-      messages: [{ role: "user", content: prompt }],
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system: systemPrompt,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: query }],
     });
 
-    res.json({ answer: message.content[0].text.trim() });
+    const textBlock = message.content.filter(b => b.type === "text").pop();
+    res.json({ answer: textBlock?.text?.trim() || "" });
   } catch (e) {
     console.error("Ask failed:", e.message);
     res.status(500).json({ error: e.message });

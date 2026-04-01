@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { PinInput } from "@mantine/core";
+import { CORRECT_PIN } from "./config";
 import { BarChart } from "@mantine/charts";
 import "@mantine/charts/styles.css";
 import {
@@ -239,6 +241,17 @@ export default function Dashboard() {
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
   const [askLoading, setAskLoading] = useState(false);
+  const [askDots, setAskDots] = useState('');
+  const [askCount, setAskCount] = useState(0);
+  const [askLocked, setAskLocked] = useState(false);
+  const [askPinError, setAskPinError] = useState(false);
+  const ASK_LIMIT = 3;
+
+  useEffect(() => {
+    if (!askLoading) { setAskDots(''); return; }
+    const iv = setInterval(() => setAskDots(d => d.length >= 3 ? '' : d + '.'), 400);
+    return () => clearInterval(iv);
+  }, [askLoading]);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
@@ -444,10 +457,8 @@ export default function Dashboard() {
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
-  const midFerries = getNextScheduled(FERRY_SCHEDULES.midtown, now);
   const dnFerries = getNextScheduled(FERRY_SCHEDULES.downtown, now);
   const midNJTFerries = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now);
-  const midFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtown, now, 3, true);
   const dnFerriesReturn = getNextScheduled(FERRY_SCHEDULES.downtown, now, 3, true);
   const midNJTFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now, 3, true);
   const busDeps = getNextScheduled(BUS_126, now, 4);
@@ -480,7 +491,7 @@ export default function Dashboard() {
   })();
 
   const heroFerry = (() => {
-    const all = [...midFerries, ...dnFerries, ...midNJTFerries].sort((a, b) => a.minsAway - b.minsAway);
+    const all = [...midNJTFerries, ...dnFerries].sort((a, b) => a.minsAway - b.minsAway);
     const f = all[0];
     if (!f) return { value: "—", sub: "No more today", color: "gray" };
     const color = f.minsAway <= 5 ? "red" : f.minsAway <= 15 ? "yellow" : "blue";
@@ -550,35 +561,68 @@ export default function Dashboard() {
 
       {/* COMMAND BAR */}
       <Paper withBorder p="sm" mb="md" radius="md">
-        <form onSubmit={async (e) => {
-          e.preventDefault();
-          if (!askQuery.trim() || askLoading) return;
-          setAskLoading(true);
-          setAskAnswer(null);
-          try {
-            const res = await fetch(CONFIG.ASK_API, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: askQuery }),
-            });
-            const data = await res.json();
-            setAskAnswer(data.answer || "");
-          } catch { setAskAnswer("Something went wrong."); }
-          finally { setAskLoading(false); }
-        }}>
-          <Group gap="xs">
-            <TextInput
-              placeholder="Ask anything… fastest way to midtown? dinner ideas? what's happening tonight?"
-              value={askQuery}
-              onChange={e => setAskQuery(e.currentTarget.value)}
-              style={{ flex: 1 }}
-              size="sm"
-              leftSection={<Text size="sm">✦</Text>}
+        {askLocked ? (
+          <Stack gap="xs" align="center" py="xs">
+            <Text size="xs" c="dimmed">Query limit reached — enter PIN to continue</Text>
+            <PinInput
+              length={4}
+              type="number"
+              mask
+              autoFocus
+              error={askPinError}
+              onComplete={(val) => {
+                if (val === CORRECT_PIN) {
+                  setAskCount(0);
+                  setAskLocked(false);
+                  setAskPinError(false);
+                } else {
+                  setAskPinError(true);
+                  setTimeout(() => setAskPinError(false), 1000);
+                }
+              }}
             />
-            <Button type="submit" size="sm" variant="light" color="violet" loading={askLoading}>Ask</Button>
-          </Group>
-        </form>
-        {askAnswer && (
+          </Stack>
+        ) : (
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!askQuery.trim() || askLoading) return;
+            const newCount = askCount + 1;
+            setAskLoading(true);
+            setAskAnswer(null);
+            setAskCount(newCount);
+            try {
+              const res = await fetch(CONFIG.ASK_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: askQuery }),
+              });
+              const data = await res.json();
+              setAskAnswer(data.answer || "");
+            } catch { setAskAnswer("Something went wrong."); }
+            finally {
+              setAskLoading(false);
+              if (newCount >= ASK_LIMIT) setAskLocked(true);
+            }
+          }}>
+            <Group gap="xs">
+              <TextInput
+                placeholder="Ask anything… fastest way to midtown? dinner ideas? what's happening tonight?"
+                value={askQuery}
+                onChange={e => setAskQuery(e.currentTarget.value)}
+                style={{ flex: 1 }}
+                size="sm"
+                leftSection={<Text size="sm">✦</Text>}
+              />
+              <Button type="submit" size="sm" variant="light" color="violet" loading={askLoading}>
+                Ask {askCount > 0 ? `(${ASK_LIMIT - askCount} left)` : ""}
+              </Button>
+            </Group>
+          </form>
+        )}
+        {askLoading && (
+          <Text size="sm" c="dimmed" mt="xs" fs="italic">Thinking{askDots}</Text>
+        )}
+        {!askLoading && askAnswer && (
           <Text size="sm" c="dimmed" mt="xs" lh={1.5}>{askAnswer}</Text>
         )}
       </Paper>
@@ -709,37 +753,34 @@ export default function Dashboard() {
             title="NY Waterway"
             right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
           />
-          <SimpleGrid cols={{ base: 1, xs: 3 }} mb="md">
+          <Box mb="md">
             {[
-              { route: FERRY_SCHEDULES.midtown, toData: midFerries, fromData: midFerriesReturn },
-              { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
               { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
-            ].map(({ route, toData, fromData }, ri) => (
-              <Card key={ri} withBorder p="sm" radius="md">
-                <Text size="sm" fw={500} mb={4}>{route.name}</Text>
-                <Text size="xs" c="dimmed" mb={2}>→ NYC · {route.from} · ~{route.tripTime} min</Text>
-                {toData.length === 0
-                  ? <Text size="xs" c="dimmed" py={2}>No more today</Text>
-                  : toData.slice(0, 3).map((f, i, arr) => (
-                    <Group key={i} justify="space-between" py={2} style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                      <Text size="xs" c="dimmed">{f.time}</Text>
-                      <Text size="xs" fw={500} c={f.minsAway <= 10 ? "blue" : undefined}>{fmtCountdown(f.minsAway)}</Text>
-                    </Group>
-                  ))
-                }
-                <Text size="xs" c="dimmed" mt="xs" mb={2}>→ Hoboken · {route.to}</Text>
-                {fromData.length === 0
-                  ? <Text size="xs" c="dimmed" py={2}>No more today</Text>
-                  : fromData.slice(0, 3).map((f, i, arr) => (
-                    <Group key={i} justify="space-between" py={2} style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                      <Text size="xs" c="dimmed">{f.time}</Text>
-                      <Text size="xs" fw={500} c={f.minsAway <= 10 ? "blue" : undefined}>{fmtCountdown(f.minsAway)}</Text>
-                    </Group>
-                  ))
-                }
-              </Card>
-            ))}
-          </SimpleGrid>
+              { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
+            ].map(({ route, toData, fromData }, ri, all) => {
+              const next = toData[0];
+              const nextReturn = fromData[0];
+              return (
+                <TransitRow
+                  key={ri}
+                  color="#0070c0"
+                  headsign={route.name}
+                  subtitle={next ? `→ NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
+                  right={
+                    next ? (
+                      <Stack gap={0} align="flex-end">
+                        <Text fw={700} size={next.minsAway <= 5 ? "lg" : "sm"} c={next.minsAway <= 5 ? "blue" : undefined}>
+                          {fmtCountdown(next.minsAway)}
+                        </Text>
+                        {nextReturn && <Text size="xs" c="dimmed">← {nextReturn.time}</Text>}
+                      </Stack>
+                    ) : null
+                  }
+                  isLast={ri === all.length - 1}
+                />
+              );
+            })}
+          </Box>
 
           <Divider mb="md" />
 
@@ -749,28 +790,22 @@ export default function Dashboard() {
             title="NJ Transit Bus to 42nd St"
             right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
           />
-          <Card withBorder p="sm" radius="md" mb="md">
-            <Grid>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed" mb="xs">→ NYC · from {BUS_126.from} · ~{BUS_126.tripTime} min</Text>
-                {busDeps.map((b, i) => (
-                  <Group key={i} justify="space-between" py={5} style={{ borderBottom: i < busDeps.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                    <Text size="sm" c="dimmed">{b.time}</Text>
-                    <Text size="sm" fw={500} c={b.minsAway <= 10 ? "orange" : undefined}>{fmtCountdown(b.minsAway)}</Text>
-                  </Group>
-                ))}
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed" mb="xs">→ Hoboken · from {BUS_126.returnFrom}</Text>
-                {busReturn.map((b, i) => (
-                  <Group key={i} justify="space-between" py={5} style={{ borderBottom: i < busReturn.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                    <Text size="sm" c="dimmed">{b.time}</Text>
-                    <Text size="sm" fw={500} c={b.minsAway <= 10 ? "orange" : undefined}>{fmtCountdown(b.minsAway)}</Text>
-                  </Group>
-                ))}
-              </Grid.Col>
-            </Grid>
-          </Card>
+          <Box mb="md">
+            {busDeps.slice(0, 4).map((b, i) => (
+              <TransitRow
+                key={i}
+                color="#f97316"
+                headsign={`→ 42nd St · from ${BUS_126.from}`}
+                subtitle={`~${BUS_126.tripTime} min ride`}
+                right={
+                  <Text fw={700} size={b.minsAway <= 5 ? "lg" : "sm"} c={b.minsAway <= 10 ? "orange" : undefined}>
+                    {b.time} · {fmtCountdown(b.minsAway)}
+                  </Text>
+                }
+                isLast={i === Math.min(busDeps.length, 4) - 1}
+              />
+            ))}
+          </Box>
 
           {/* STRAVA */}
           {strava && (
@@ -816,6 +851,50 @@ export default function Dashboard() {
               </SectionCard>
             </>
           )}
+
+          <Divider mb="md" />
+
+          {/* NEWS */}
+          <SectionHeader
+            badge="News" badgeColor="blue" title="Top Headlines"
+            right={
+              <SegmentedControl
+                size="xs"
+                value={newsCategory}
+                onChange={setNewsCategory}
+                data={["All", "World", "Business", "Tech", "NYC"]}
+              />
+            }
+          />
+          {newsDigest && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
+          )}
+          <SectionCard mb="md">
+            {(() => {
+              const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
+              if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
+              return filtered.slice(0, 15).map((item, i, arr) => (
+                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                  <Stack gap={2} style={{ flexShrink: 0 }}>
+                    <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
+                    <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
+                  </Stack>
+                  <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never"
+                    style={{ flex: 1, lineHeight: 1.4 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
+                    onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
+                  >
+                    {item.title}
+                  </Anchor>
+                  {item.pubDate && (
+                    <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                      {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                  )}
+                </Group>
+              ));
+            })()}
+          </SectionCard>
 
         </Grid.Col>
 
@@ -871,57 +950,6 @@ export default function Dashboard() {
               </Table.Tbody>
             </Table>
           </SectionCard>
-
-          <Divider mb="md" />
-
-          {/* RESTAURANT */}
-          {restaurants.length > 0 && (
-            <Box mb="md">
-              <SectionHeader
-                badge="Eat" badgeColor="orange"
-                title="Where to Eat"
-                right={
-                  <SegmentedControl
-                    size="xs"
-                    value={restaurantArea}
-                    onChange={setRestaurantArea}
-                    data={["Hoboken", "Manhattan"]}
-                  />
-                }
-              />
-              {restaurantPick && (
-                <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>
-              )}
-              <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
-                {restaurants
-                  .filter(r => r.area === restaurantArea)
-                  .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-                  .slice(0, 6)
-                  .map((r, i) => (
-                    <Card key={i} withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
-                      {r.photo && (
-                        <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />
-                      )}
-                      <Box p="sm">
-                        <Group justify="space-between" mb={4} wrap="nowrap">
-                          <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>
-                          {r.rating && (
-                            <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>
-                          )}
-                        </Group>
-                        <Group gap="xs" mb={4}>
-                          <Badge size="xs" variant="light" color="orange">{r.category}</Badge>
-                          {r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}
-                        </Group>
-                        <Text size="xs" c="dimmed" truncate mb={4}>{r.address}</Text>
-                        {r.website && <Anchor href={r.website} target="_blank" size="xs">Visit →</Anchor>}
-                      </Box>
-                    </Card>
-                  ))
-                }
-              </SimpleGrid>
-            </Box>
-          )}
 
           <Divider mb="md" />
 
@@ -1049,49 +1077,57 @@ export default function Dashboard() {
             )
           }
 
-          <Divider mb="md" />
-
-          {/* NEWS */}
-          <SectionHeader
-            badge="News" badgeColor="blue" title="Top Headlines"
-            right={
-              <SegmentedControl
-                size="xs"
-                value={newsCategory}
-                onChange={setNewsCategory}
-                data={["All", "World", "Business", "Tech", "NYC"]}
-              />
-            }
-          />
-          {newsDigest && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{newsDigest}</Text>
+          {/* RESTAURANT */}
+          {restaurants.length > 0 && (
+            <>
+              <Divider mb="md" />
+              <Box mb="md">
+                <SectionHeader
+                  badge="Eat" badgeColor="orange"
+                  title="Where to Eat"
+                  right={
+                    <SegmentedControl
+                      size="xs"
+                      value={restaurantArea}
+                      onChange={setRestaurantArea}
+                      data={["Hoboken", "Manhattan"]}
+                    />
+                  }
+                />
+                {restaurantPick && (
+                  <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>
+                )}
+                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">
+                  {restaurants
+                    .filter(r => r.area === restaurantArea)
+                    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+                    .slice(0, 6)
+                    .map((r, i) => (
+                      <Card key={i} withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
+                        {r.photo && (
+                          <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />
+                        )}
+                        <Box p="sm">
+                          <Group justify="space-between" mb={4} wrap="nowrap">
+                            <Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>
+                            {r.rating && (
+                              <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>
+                            )}
+                          </Group>
+                          <Group gap="xs" mb={4}>
+                            <Badge size="xs" variant="light" color="orange">{r.category}</Badge>
+                            {r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}
+                          </Group>
+                          <Text size="xs" c="dimmed" truncate mb={4}>{r.address}</Text>
+                          {r.website && <Anchor href={r.website} target="_blank" size="xs">Visit →</Anchor>}
+                        </Box>
+                      </Card>
+                    ))
+                  }
+                </SimpleGrid>
+              </Box>
+            </>
           )}
-          <SectionCard>
-            {(() => {
-              const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
-              if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
-              return filtered.slice(0, 15).map((item, i, arr) => (
-                <Group key={i} p="xs" gap="xs" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                  <Stack gap={2} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" variant="light" color="blue">{item.category || "News"}</Badge>
-                    <Badge size="xs" variant="outline" color="gray">{item.source}</Badge>
-                  </Stack>
-                  <Anchor href={item.link} target="_blank" size="xs" c="var(--mantine-color-text)" underline="never"
-                    style={{ flex: 1, lineHeight: 1.4 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"}
-                    onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}
-                  >
-                    {item.title}
-                  </Anchor>
-                  {item.pubDate && (
-                    <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                      {new Date(item.pubDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </Text>
-                  )}
-                </Group>
-              ));
-            })()}
-          </SectionCard>
 
         </Grid.Col>
       </Grid>

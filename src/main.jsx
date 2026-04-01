@@ -4,6 +4,7 @@ import { MantineProvider, createTheme, Box, PinInput, Text, Stack } from '@manti
 import '@mantine/core/styles.css'
 import './index.css'
 import Dashboard from './Dashboard'
+import { CORRECT_PIN } from './config'
 
 const theme = createTheme({
   fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -20,7 +21,6 @@ const cssVariablesResolver = () => ({
   dark: {},
 })
 
-const CORRECT_PIN = '6514'
 const STORAGE_KEY = 'gl_auth'
 
 function App() {

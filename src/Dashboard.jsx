@@ -969,48 +969,6 @@ export default function Dashboard() {
 
           <Divider mb="md" />
 
-          {/* EVENTS */}
-          <SectionHeader
-            badge="Events" badgeColor="violet"
-            title="NYC This Week"
-            right={
-              <Group gap="xs">
-                <Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text>
-                <ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon>
-                <ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon>
-              </Group>
-            }
-          />
-          {eventPicks && (
-            <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>
-          )}
-          <SectionCard>
-            {events.length === 0
-              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
-              : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
-                const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
-                const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-                return (
-                  <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                    {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
-                    <Box style={{ flex: 1, minWidth: 0 }}>
-                      <Text size="xs" fw={500} truncate>{e.name}</Text>
-                      <Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text>
-                    </Box>
-                    <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}>
-                      <Text size="xs" c="dimmed">{dateStr}</Text>
-                      <Text size="xs" c="dimmed">{timeStr}</Text>
-                      {e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}
-                    </Stack>
-                    {e.url && <Anchor href={e.url} target="_blank" size="xs" c="blue">→</Anchor>}
-                  </Group>
-                );
-              })
-            }
-          </SectionCard>
-
-          <Divider mb="md" />
-
           {/* SPORTS */}
           <SectionHeader
             badge="Sports" badgeColor="violet"
@@ -1092,6 +1050,47 @@ export default function Dashboard() {
               </Box>
             )
           }
+
+          {/* EVENTS */}
+          <Divider mb="md" />
+          <SectionHeader
+            badge="Events" badgeColor="violet"
+            title="NYC This Week"
+            right={
+              <Group gap="xs">
+                <Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text>
+                <ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon>
+                <ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon>
+              </Group>
+            }
+          />
+          {eventPicks && (
+            <Text size="xs" c="dimmed" mb="xs" fs="italic">{eventPicks}</Text>
+          )}
+          <SectionCard mb="md">
+            {events.length === 0
+              ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
+              : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
+                const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
+                const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+                return (
+                  <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                    {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" fw={500} truncate>{e.name}</Text>
+                      <Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text>
+                    </Box>
+                    <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}>
+                      <Text size="xs" c="dimmed">{dateStr}</Text>
+                      <Text size="xs" c="dimmed">{timeStr}</Text>
+                      {e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}
+                    </Stack>
+                    {e.url && <Anchor href={e.url} target="_blank" size="xs" c="blue">→</Anchor>}
+                  </Group>
+                );
+              })
+            }
+          </SectionCard>
 
           {/* RESTAURANT */}
           {restaurants.length > 0 && (

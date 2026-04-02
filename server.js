@@ -1216,11 +1216,12 @@ app.post("/api/ask", optionalAuth, async (req, res) => {
     }).join("\n");
 
     // Strava
-    const stravaCtx = cachedStrava ? (() => {
-      const recent = (cachedStrava.activities || []).slice(0, 5)
+    const stravaCtxData = cachedStravaMap[req.user?.userId || '__global__'] || cachedStravaMap['__global__'];
+    const stravaCtx = stravaCtxData ? (() => {
+      const recent = (stravaCtxData.activities || []).slice(0, 5)
         .map(a => `${a.name} (${a.type}, ${(a.distance / 1000).toFixed(1)}km, ${Math.round(a.moving_time / 60)}min${a.calories ? ", " + a.calories + "cal" : ""})`).join("; ");
-      const totalCal = (cachedStrava.activities || []).reduce((s, a) => s + (a.calories || 0), 0);
-      return `Weekly workouts: ${cachedStrava.weeklyCount} | Recent: ${recent}${totalCal ? " | Total calories: " + totalCal : ""}`;
+      const totalCal = (stravaCtxData.activities || []).reduce((s, a) => s + (a.calories || 0), 0);
+      return `Weekly workouts: ${stravaCtxData.weeklyCount} | Recent: ${recent}${totalCal ? " | Total calories: " + totalCal : ""}`;
     })() : "no data";
 
     const systemPrompt = `You are ${name}'s personal assistant. ${name} lives at ${address}. Be helpful and thorough — 5-10 sentences when useful, shorter for simple questions. Use web search for anything needing current information. Reference the dashboard data below directly when relevant.
@@ -1277,8 +1278,8 @@ FITNESS (Strava): ${stravaCtx}`;
 
 let stravaAccessToken = null;
 let stravaTokenExpiry = 0;
-let cachedStrava = null;
-let lastStravaFetch = 0;
+const cachedStravaMap = {};
+const lastStravaFetchMap2 = {};
 
 async function getStravaAccessToken() {
   if (stravaAccessToken && Date.now() < stravaTokenExpiry - 60000) return stravaAccessToken;
@@ -1296,6 +1297,41 @@ async function getStravaAccessToken() {
   stravaAccessToken = data.access_token;
   stravaTokenExpiry = data.expires_at * 1000;
   return stravaAccessToken;
+}
+
+async function getUserStravaToken(userId) {
+  if (!userId) return getStravaAccessToken(); // legacy env var fallback
+  const cfg = await getConfigForUser(userId);
+  const tokens = cfg.strava_tokens;
+  if (!tokens?.refresh_token) return null;
+  // Refresh if expired
+  if (Date.now() / 1000 >= (tokens.expires_at || 0) - 60) {
+    try {
+      const r = await fetch("https://www.strava.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: process.env.STRAVA_CLIENT_ID,
+          client_secret: process.env.STRAVA_CLIENT_SECRET,
+          refresh_token: tokens.refresh_token,
+          grant_type: "refresh_token",
+        }),
+      });
+      const data = await r.json();
+      if (!data.access_token) return null;
+      const newTokens = { ...tokens, access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at };
+      if (pool) {
+        await pool.query(
+          `INSERT INTO user_config (key, value, user_id) VALUES ('strava_tokens', $1::jsonb, $2)
+           ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO UPDATE SET value=$1::jsonb, updated_at=NOW()`,
+          [JSON.stringify(newTokens), userId]
+        );
+        delete cachedConfigMap[userId];
+      }
+      return data.access_token;
+    } catch { return null; }
+  }
+  return tokens.access_token;
 }
 
 const fmt = (meters) => (meters / 1609.34).toFixed(2);
@@ -1335,20 +1371,94 @@ function buildStravaResponse(rows) {
   return { activities: rows, weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
 }
 
-app.get("/api/strava", async (req, res) => {
+app.get("/api/strava/status", optionalAuth, async (req, res) => {
+  if (!req.user?.userId) return res.json({ connected: false });
+  const cfg = await getConfigForUser(req.user.userId);
+  res.json({ connected: Boolean(cfg.strava_tokens?.refresh_token), athlete: cfg.strava_tokens?.athlete_name || null });
+});
+
+app.get("/api/strava/connect", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token;
+  let userId;
+  try {
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryToken;
+    if (!token) return res.status(401).json({ error: "unauthorized" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    userId = decoded.userId;
+  } catch {
+    return res.status(401).json({ error: "invalid token" });
+  }
+  const redirectUri = `${process.env.APP_URL || 'https://hoboken-dashboard-production.up.railway.app'}/api/strava/callback`;
+  const url = `https://www.strava.com/oauth/authorize?client_id=${process.env.STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=activity:read_all&state=${userId}`;
+  res.redirect(url);
+});
+
+app.get("/api/strava/callback", async (req, res) => {
+  const { code, state: userId } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || 'https://main.d2s6v9m1z5h8k3.amplifyapp.com';
+  if (!code || !userId) return res.redirect(`${frontendUrl}?strava_error=invalid`);
+  try {
+    const r = await fetch("https://www.strava.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: process.env.STRAVA_CLIENT_ID,
+        client_secret: process.env.STRAVA_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+      }),
+    });
+    const data = await r.json();
+    if (!data.access_token) throw new Error(data.message || "Token exchange failed");
+    const tokens = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: data.expires_at,
+      athlete_id: data.athlete?.id,
+      athlete_name: data.athlete?.firstname,
+    };
+    if (pool) {
+      await pool.query(
+        `INSERT INTO user_config (key, value, user_id) VALUES ('strava_tokens', $1::jsonb, $2)
+         ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO UPDATE SET value=$1::jsonb, updated_at=NOW()`,
+        [JSON.stringify(tokens), userId]
+      );
+      delete cachedConfigMap[userId];
+    }
+    res.redirect(`${frontendUrl}?strava_connected=1`);
+  } catch (e) {
+    console.error("Strava callback failed:", e.message);
+    res.redirect(`${frontendUrl}?strava_error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+app.post("/api/strava/disconnect", requireAuth, async (req, res) => {
+  if (pool) {
+    await pool.query("DELETE FROM user_config WHERE key = 'strava_tokens' AND user_id = $1", [req.user.userId]);
+    delete cachedConfigMap[req.user.userId];
+  }
+  res.json({ ok: true });
+});
+
+app.get("/api/strava", optionalAuth, async (req, res) => {
+  const userId = req.user?.userId || null;
+  const stravaKey = userId || '__global__';
   const now = Date.now();
-  if (cachedStrava && now - lastStravaFetch < 3600000) return res.json(cachedStrava);
+  if (cachedStravaMap[stravaKey] && now - (lastStravaFetchMap2[stravaKey] || 0) < 3600000) return res.json(cachedStravaMap[stravaKey]);
+
+  const token = await getUserStravaToken(userId);
+  if (!token) return res.json({ connected: false, activities: [], weeklyCount: 0, chartData: [] });
 
   // No DB available — fall back to full direct fetch
-  if (!pool) return fetchStravaDirectly(res, now);
+  if (!pool) return fetchStravaDirectly(res, now, token);
 
   try {
-    const latestRow = await pool.query("SELECT start_date FROM strava_activities ORDER BY start_date DESC LIMIT 1");
+    const latestRow = await pool.query("SELECT start_date FROM strava_activities WHERE user_id IS NOT DISTINCT FROM $1 ORDER BY start_date DESC LIMIT 1", [userId]);
     const afterTs = latestRow.rows[0]?.start_date
       ? Math.floor(new Date(latestRow.rows[0].start_date).getTime() / 1000)
       : 0;
 
-    const token = await getStravaAccessToken();
     const url = afterTs > 0
       ? `https://www.strava.com/api/v3/athlete/activities?per_page=50&after=${afterTs}`
       : `https://www.strava.com/api/v3/athlete/activities?per_page=50`;
@@ -1367,8 +1477,8 @@ app.get("/api/strava", async (req, res) => {
         const detail = details[i] || {};
         const type = a.sport_type || a.type;
         await pool.query(`
-          INSERT INTO strava_activities (id, name, type, emoji, date, distance, duration, pace, elevation, heartrate, calories, moving_time, start_date)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          INSERT INTO strava_activities (id, name, type, emoji, date, distance, duration, pace, elevation, heartrate, calories, moving_time, start_date, user_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
           ON CONFLICT (id) DO UPDATE SET calories = EXCLUDED.calories, name = EXCLUDED.name
         `, [
           a.id, a.name, type, typeEmoji[type] || "🏅",
@@ -1379,28 +1489,27 @@ app.get("/api/strava", async (req, res) => {
           a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
           a.average_heartrate ? Math.round(a.average_heartrate) : null,
           detail.calories ? Math.round(detail.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
-          a.moving_time, a.start_date,
+          a.moving_time, a.start_date, userId,
         ]);
       }
     }
 
-    const { rows } = await pool.query("SELECT * FROM strava_activities ORDER BY start_date DESC LIMIT 50");
-    cachedStrava = buildStravaResponse(rows);
-    lastStravaFetch = now;
-    res.json(cachedStrava);
+    const { rows } = await pool.query("SELECT * FROM strava_activities WHERE user_id IS NOT DISTINCT FROM $1 ORDER BY start_date DESC LIMIT 50", [userId]);
+    cachedStravaMap[stravaKey] = buildStravaResponse(rows);
+    lastStravaFetchMap2[stravaKey] = now;
+    res.json(cachedStravaMap[stravaKey]);
   } catch (e) {
     console.error("Strava/DB failed:", e.message);
     try {
-      const { rows } = await pool.query("SELECT * FROM strava_activities ORDER BY start_date DESC LIMIT 50");
-      if (rows.length > 0) { cachedStrava = buildStravaResponse(rows); return res.json(cachedStrava); }
+      const { rows } = await pool.query("SELECT * FROM strava_activities WHERE user_id IS NOT DISTINCT FROM $1 ORDER BY start_date DESC LIMIT 50", [userId]);
+      if (rows.length > 0) { cachedStravaMap[stravaKey] = buildStravaResponse(rows); return res.json(cachedStravaMap[stravaKey]); }
     } catch {}
-    return fetchStravaDirectly(res, now);
+    return fetchStravaDirectly(res, now, token);
   }
 });
 
-async function fetchStravaDirectly(res, now) {
+async function fetchStravaDirectly(res, now, token) {
   try {
-    const token = await getStravaAccessToken();
     const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=50`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -1425,12 +1534,12 @@ async function fetchStravaDirectly(res, now) {
         calories: detail.calories ? Math.round(detail.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
       };
     });
-    cachedStrava = buildStravaResponse(result);
-    lastStravaFetch = now;
-    res.json(cachedStrava);
+    cachedStravaMap['__global__'] = buildStravaResponse(result);
+    lastStravaFetchMap2['__global__'] = now;
+    res.json(cachedStravaMap['__global__']);
   } catch (e) {
     console.error("Strava direct fetch failed:", e.message);
-    res.json(cachedStrava || { activities: [], weeklyCount: 0, chartData: [] });
+    res.json(cachedStravaMap['__global__'] || { activities: [], weeklyCount: 0, chartData: [] });
   }
 }
 

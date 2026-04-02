@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box } from '@mantine/core';
-import { useConfig } from './ConfigContext';
+import { useConfig, API_BASE } from './ConfigContext';
 import { useAuth } from './AuthContext';
 
 const EMPTY_LINE = {
@@ -92,6 +92,14 @@ export default function SettingsModal({ opened, onClose }) {
   const [editingLine, setEditingLine] = useState(null); // null | 'new' | line object
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');
+  const [stravaStatus, setStravaStatus] = useState(null);
+
+  useEffect(() => {
+    if (!opened) return;
+    fetch(`${API_BASE}/api/strava/status`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+    }).then(r => r.json()).then(setStravaStatus).catch(() => {});
+  }, [opened]);
 
   const save = async (patch, label) => {
     setSaving(true);
@@ -145,6 +153,7 @@ export default function SettingsModal({ opened, onClose }) {
           <Tabs.Tab value="security">PIN</Tabs.Tab>
           <Tabs.Tab value="sections">Sections</Tabs.Tab>
           <Tabs.Tab value="stocks">Stocks</Tabs.Tab>
+          <Tabs.Tab value="fitness">Fitness</Tabs.Tab>
           <Tabs.Tab value="account">Account</Tabs.Tab>
         </Tabs.List>
 
@@ -285,6 +294,31 @@ export default function SettingsModal({ opened, onClose }) {
             }} loading={saving}>
               {saved === 'watchlist' ? 'Saved!' : 'Save'}
             </Button>
+          </Stack>
+        </Tabs.Panel>
+        <Tabs.Panel value="fitness">
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">Connect your Strava account to show your workouts on the dashboard.</Text>
+            <Divider />
+            {stravaStatus?.connected ? (
+              <Stack gap="sm">
+                <Text size="sm">Connected{stravaStatus.athlete ? ` as ${stravaStatus.athlete}` : ''}</Text>
+                <Button size="sm" variant="default" color="red" onClick={async () => {
+                  await fetch(`${API_BASE}/api/strava/disconnect`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+                  });
+                  setStravaStatus({ connected: false });
+                }}>Disconnect Strava</Button>
+              </Stack>
+            ) : (
+              <Button
+                size="sm"
+                color="orange"
+                component="a"
+                href={`${API_BASE}/api/strava/connect?token=${localStorage.getItem('auth_token')}`}
+              >Connect Strava</Button>
+            )}
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="account">

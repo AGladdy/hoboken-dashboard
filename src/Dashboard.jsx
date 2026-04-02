@@ -258,6 +258,7 @@ export default function Dashboard() {
   const [refreshCount, setRefreshCount] = useState(0);
   const [sportsRecap, setSportsRecap] = useState(null);
   const [strava, setStrava] = useState(null);
+  const [stravaConnected, setStravaConnected] = useState(true);
   const [newsCategory, setNewsCategory] = useState("All");
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
@@ -425,9 +426,13 @@ export default function Dashboard() {
 
   const fetchStrava = useCallback(async () => {
     try {
-      const res = await fetch(CONFIG.STRAVA_API);
+      const res = await fetch(CONFIG.STRAVA_API, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
+      });
       if (!res.ok) throw new Error();
       const data = await res.json();
+      if (data.connected === false) { setStravaConnected(false); return; }
+      setStravaConnected(true);
       if (data.activities) setStrava(data);
     } catch (e) { console.error("Strava fetch failed:", e); }
   }, []);
@@ -450,6 +455,15 @@ export default function Dashboard() {
     setStocks([]);
     fetchStocks();
   }, [stockRange, fetchStocks]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('strava_connected')) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setStravaConnected(true);
+      fetchStrava();
+    }
+  }, [fetchStrava]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -804,7 +818,7 @@ export default function Dashboard() {
              case 'strava': return (
               <Box key="strava">
                 <SectionHeader badge="Fitness" badgeColor="orange" title="Recent Workouts" dragHandle={dh}
-                  right={strava ? (() => {
+                  right={strava && stravaConnected ? (() => {
                     const totalCal = strava.activities.reduce((sum, a) => sum + (a.calories || 0), 0);
                     const totalPages = Math.ceil(strava.activities.length / STRAVA_PAGE_SIZE);
                     return (
@@ -817,25 +831,36 @@ export default function Dashboard() {
                     );
                   })() : null}
                 />
-                {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
-                  {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} />}
-                  <SectionCard mb="md">
-                    {strava.activities.slice(stravaPage * STRAVA_PAGE_SIZE, (stravaPage + 1) * STRAVA_PAGE_SIZE).map((a, i, arr) => (
-                      <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                        <Group gap="xs" wrap="nowrap">
-                          <Text size="md">{a.emoji}</Text>
-                          <Box><Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text><Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text></Box>
-                        </Group>
-                        <Group gap="xs" wrap="nowrap">
-                          <Badge size="xs" variant="light" color="orange">{a.type}</Badge>
-                          <Text size="xs" c="dimmed">{a.duration}</Text>
-                          {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
-                          {a.calories && <Text size="xs" c="dimmed">{a.calories} cal</Text>}
-                        </Group>
-                      </Group>
-                    ))}
-                  </SectionCard>
-                </>)}
+                {!stravaConnected ? (
+                  <Stack align="center" gap="sm" py="md">
+                    <Text size="sm" c="dimmed">Connect your Strava account to see your workouts here.</Text>
+                    <Button size="xs" color="orange" component="a" href={`${API_BASE}/api/strava/connect?token=${localStorage.getItem('auth_token')}`}>
+                      Connect Strava
+                    </Button>
+                  </Stack>
+                ) : (
+                  <>
+                    {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
+                      {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} />}
+                      <SectionCard mb="md">
+                        {strava.activities.slice(stravaPage * STRAVA_PAGE_SIZE, (stravaPage + 1) * STRAVA_PAGE_SIZE).map((a, i, arr) => (
+                          <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                            <Group gap="xs" wrap="nowrap">
+                              <Text size="md">{a.emoji}</Text>
+                              <Box><Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text><Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text></Box>
+                            </Group>
+                            <Group gap="xs" wrap="nowrap">
+                              <Badge size="xs" variant="light" color="orange">{a.type}</Badge>
+                              <Text size="xs" c="dimmed">{a.duration}</Text>
+                              {a.heartrate && <Text size="xs" c="red">♥ {a.heartrate}</Text>}
+                              {a.calories && <Text size="xs" c="dimmed">{a.calories} cal</Text>}
+                            </Group>
+                          </Group>
+                        ))}
+                      </SectionCard>
+                    </>)}
+                  </>
+                )}
               </Box>
             );
             case 'stocks': return (

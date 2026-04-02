@@ -998,19 +998,27 @@ export default function Dashboard() {
                 />
                 {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
                 {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
-                  <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm" mb="md">
-                    {restaurants.filter(r => r.area === restaurantArea).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6).map((r, i) => (
-                      <Card key={i} withBorder p={0} radius="md" style={{ overflow: "hidden" }}>
-                        {r.photo && <img src={r.photo} alt={r.name} style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }} />}
-                        <Box p="sm">
-                          <Group justify="space-between" mb={4} wrap="nowrap"><Text size="sm" fw={600} truncate style={{ flex: 1 }}>{r.name}</Text>{r.rating && <Text size="xs" c="orange" fw={600} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}</Group>
-                          <Group gap="xs" mb={4}><Badge size="xs" variant="light" color="orange">{r.category}</Badge>{r.price && <Badge size="xs" variant="outline" color="gray">{"$".repeat(r.price)}</Badge>}</Group>
-                          <Text size="xs" c="dimmed" truncate mb={4}>{r.address}</Text>
-                          {r.website && <Anchor href={r.website} target="_blank" size="xs">Visit →</Anchor>}
+                  <Stack gap="xs" mb="md">
+                    {restaurants.filter(r => r.area === restaurantArea).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8).map((r, i) => (
+                      <Box key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", borderRadius: 8, background: "var(--mantine-color-default-hover)" }}>
+                        {r.photo
+                          ? <img src={r.photo} alt={r.name} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                          : <Box style={{ width: 48, height: 48, borderRadius: 6, background: "var(--mantine-color-dark-5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text size="lg">🍽️</Text></Box>
+                        }
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                          <Group justify="space-between" wrap="nowrap" gap="xs">
+                            <Text size="sm" fw={600} truncate>{r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}</Text>
+                            {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
+                          </Group>
+                          <Group gap={6} mt={2}>
+                            <Text size="xs" c="dimmed">{r.category}</Text>
+                            {r.price && <Text size="xs" c="dimmed">· {"$".repeat(r.price)}</Text>}
+                            {r.address && <Text size="xs" c="dimmed" truncate>· {r.address.split(",").slice(0, 2).join(",")}</Text>}
+                          </Group>
                         </Box>
-                      </Card>
+                      </Box>
                     ))}
-                  </SimpleGrid>
+                  </Stack>
                 )}
               </Box>
             );

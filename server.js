@@ -1479,7 +1479,7 @@ app.get("/api/strava", optionalAuth, async (req, res) => {
         await pool.query(`
           INSERT INTO strava_activities (id, name, type, emoji, date, distance, duration, pace, elevation, heartrate, calories, moving_time, start_date, user_id)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-          ON CONFLICT (id) DO UPDATE SET calories = EXCLUDED.calories, name = EXCLUDED.name
+          ON CONFLICT (id) DO UPDATE SET calories = EXCLUDED.calories, name = EXCLUDED.name, user_id = COALESCE(strava_activities.user_id, EXCLUDED.user_id)
         `, [
           a.id, a.name, type, typeEmoji[type] || "🏅",
           a.start_date_local?.split("T")[0],
@@ -1492,6 +1492,11 @@ app.get("/api/strava", optionalAuth, async (req, res) => {
           a.moving_time, a.start_date, userId,
         ]);
       }
+    }
+
+    // Backfill user_id on rows stored before auth existed (one-time migration)
+    if (userId) {
+      await pool.query("UPDATE strava_activities SET user_id = $1 WHERE user_id IS NULL", [userId]).catch(() => {});
     }
 
     const { rows } = await pool.query("SELECT * FROM strava_activities WHERE user_id IS NOT DISTINCT FROM $1 ORDER BY start_date DESC LIMIT 50", [userId]);

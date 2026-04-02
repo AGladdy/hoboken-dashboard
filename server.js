@@ -1425,6 +1425,9 @@ app.get("/api/strava/callback", async (req, res) => {
         [JSON.stringify(tokens), userId]
       );
       delete cachedConfigMap[userId];
+      // Clear strava cache so next request fetches fresh data
+      delete cachedStravaMap[userId];
+      delete lastStravaFetchMap2[userId];
     }
     res.redirect(`${frontendUrl}?strava_connected=1`);
   } catch (e) {

@@ -453,12 +453,16 @@ export default function Dashboard() {
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
-  const dnFerries = getNextScheduled(FERRY_SCHEDULES.downtown, now);
-  const midNJTFerries = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now);
-  const dnFerriesReturn = getNextScheduled(FERRY_SCHEDULES.downtown, now, 3, true);
-  const midNJTFerriesReturn = getNextScheduled(FERRY_SCHEDULES.midtownNJT, now, 3, true);
-  const busDeps = getNextScheduled(BUS_126, now, 4);
-  const busReturn = getNextScheduled(BUS_126, now, 4, true);
+
+  // Use config transit lines if set, otherwise fall back to built-in defaults
+  const configLines = config.transit_lines && config.transit_lines.length > 0 ? config.transit_lines : null;
+  const ferryLines = configLines
+    ? configLines.filter(l => l.type === 'ferry')
+    : [FERRY_SCHEDULES.midtownNJT, FERRY_SCHEDULES.downtown];
+  const busLines = configLines
+    ? configLines.filter(l => l.type === 'bus')
+    : [BUS_126];
+
 
   // Memoize sports grouping — only recomputes when league data or selection changes
   const sportsGroups = useMemo(() => {
@@ -487,8 +491,8 @@ export default function Dashboard() {
   })();
 
   const heroFerry = (() => {
-    const all = [...midNJTFerries, ...dnFerries].sort((a, b) => a.minsAway - b.minsAway);
-    const f = all[0];
+    const allDeps = ferryLines.flatMap(route => getNextScheduled(route, now, 3)).sort((a, b) => a.minsAway - b.minsAway);
+    const f = allDeps[0];
     if (!f) return { value: "—", sub: "No more today", color: "gray" };
     const color = f.minsAway <= 5 ? "red" : f.minsAway <= 15 ? "yellow" : "blue";
     return { value: f.time, sub: `${f.minsAway} min away`, color };
@@ -740,28 +744,37 @@ export default function Dashboard() {
             );
             case 'ferry': return (
               <Box key="ferry">
-                <SectionHeader badge="Ferry" badgeColor="blue" title="NY Waterway" dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
+                <SectionHeader badge="Ferry" badgeColor="blue" title={configLines ? "Ferry" : "NY Waterway"} dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
                 <Box mb="md">
-                  {[
-                    { route: FERRY_SCHEDULES.midtownNJT, toData: midNJTFerries, fromData: midNJTFerriesReturn },
-                    { route: FERRY_SCHEDULES.downtown, toData: dnFerries, fromData: dnFerriesReturn },
-                  ].map(({ route, toData, fromData }, ri, all) => {
+                  {ferryLines.map((route, ri) => {
+                    const toData = getNextScheduled(route, now, 3);
+                    const fromData = getNextScheduled(route, now, 3, true);
                     const next = toData[0]; const nextReturn = fromData[0];
-                    return <TransitRow key={ri} color="#0070c0" headsign={route.name} subtitle={next ? `To NYC ${next.time} · ~${route.tripTime} min` : "No more today"}
+                    const label = route.name || `${route.from} → ${route.to}`;
+                    return <TransitRow key={ri} color="#0070c0" headsign={label} subtitle={next ? `${next.time} · ~${route.tripTime} min` : "No more today"}
                       right={next ? <Stack gap={0} align="flex-end"><Text fw={700} size={next.minsAway <= 5 ? "lg" : "sm"} c={next.minsAway <= 5 ? "blue" : undefined}>{fmtCountdown(next.minsAway)}</Text>{nextReturn && <Text size="xs" c="dimmed">← {nextReturn.time}</Text>}</Stack> : null}
-                      isLast={ri === all.length - 1} />;
+                      isLast={ri === ferryLines.length - 1} />;
                   })}
                 </Box>
               </Box>
             );
             case 'bus': return (
               <Box key="bus">
-                <SectionHeader badge="126" badgeColor="orange" title="NJ Transit Bus to 42nd St" dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
+                <SectionHeader badge="Bus" badgeColor="orange" title={configLines ? "Bus" : "NJ Transit Bus to 42nd St"} dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
                 <Box mb="md">
-                  {(() => { const nextOut = busDeps[0]; const nextIn = busReturn[0]; return (<>
-                    <TransitRow color="#f97316" headsign={`To 42nd St · from ${BUS_126.from}`} subtitle={nextOut ? `~${BUS_126.tripTime} min ride` : "No more today"} right={nextOut ? <Text fw={700} size={nextOut.minsAway <= 5 ? "lg" : "sm"} c={nextOut.minsAway <= 10 ? "orange" : undefined}>{nextOut.time} · {fmtCountdown(nextOut.minsAway)}</Text> : null} isLast={false} />
-                    <TransitRow color="#f97316" headsign={`To Hoboken · from ${BUS_126.returnFrom}`} subtitle={nextIn ? `~${BUS_126.tripTime} min ride` : "No more today"} right={nextIn ? <Text fw={700} size="sm" c="dimmed">{nextIn.time}</Text> : null} isLast={true} />
-                  </>); })()}
+                  {busLines.map((route, ri) => {
+                    const deps = getNextScheduled(route, now, 4);
+                    const rets = getNextScheduled(route, now, 4, true);
+                    const nextOut = deps[0]; const nextIn = rets[0];
+                    const outLabel = route.name || `To ${route.to || '42nd St'} · from ${route.from || 'Terminal'}`;
+                    const retLabel = configLines ? `Return · from ${route.to || 'Terminal'}` : `To Hoboken · from ${route.returnFrom || route.to}`;
+                    return (
+                      <Box key={ri}>
+                        <TransitRow color="#f97316" headsign={outLabel} subtitle={nextOut ? `~${route.tripTime} min ride` : "No more today"} right={nextOut ? <Text fw={700} size={nextOut.minsAway <= 5 ? "lg" : "sm"} c={nextOut.minsAway <= 10 ? "orange" : undefined}>{nextOut.time} · {fmtCountdown(nextOut.minsAway)}</Text> : null} isLast={false} />
+                        <TransitRow color="#f97316" headsign={retLabel} subtitle={nextIn ? `~${route.tripTime} min ride` : "No more today"} right={nextIn ? <Text fw={700} size="sm" c="dimmed">{nextIn.time}</Text> : null} isLast={ri === busLines.length - 1} />
+                      </Box>
+                    );
+                  })}
                 </Box>
               </Box>
             );

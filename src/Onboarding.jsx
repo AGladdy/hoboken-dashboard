@@ -127,7 +127,7 @@ export default function Onboarding({ onComplete }) {
               />
               <TextInput
                 label="Street address"
-                placeholder="205 Hudson St, Hoboken, NJ"
+                placeholder="The White House, 1600 Pennsylvania Ave NW"
                 value={address}
                 onChange={e => setAddress(e.currentTarget.value)}
                 description="Used in AI search prompts for better local context"

@@ -69,7 +69,7 @@ async function initDb() {
     ['display_name', '"User"'],
     ['app_title', '"My Dashboard"'],
     ['pin_hash', '""'],
-    ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"Hoboken, NJ"}'],
+    ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"The White House, 1600 Pennsylvania Ave NW, Washington, DC"}'],
     ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
   ];
   for (const [key, val] of defaults) {
@@ -111,7 +111,7 @@ const DEFAULT_CONFIG = {
   display_name: "User",
   app_title: "My Dashboard",
   pin_hash: "",
-  location: { city: "Hoboken, NJ", lat: 40.744, lon: -74.032, address: "Hoboken, NJ" },
+  location: { city: "Hoboken, NJ", lat: 40.744, lon: -74.032, address: "The White House, 1600 Pennsylvania Ave NW, Washington, DC" },
   visible_sections: ["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"],
 };
 

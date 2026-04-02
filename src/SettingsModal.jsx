@@ -1,6 +1,63 @@
 import { useState } from 'react';
-import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider } from '@mantine/core';
+import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Collapse } from '@mantine/core';
 import { useConfig } from './ConfigContext';
+
+const EMPTY_LINE = {
+  id: null, name: '', type: 'bus', from: '', to: '', tripTime: 20,
+  weekday: '', weekend: '', returnWeekday: '', returnWeekend: '',
+};
+
+function parseTimes(str) {
+  return str.split(',').map(s => s.trim()).filter(Boolean);
+}
+function joinTimes(arr) {
+  return (arr || []).join(', ');
+}
+
+function LineEditor({ line, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    ...EMPTY_LINE, ...line,
+    weekday: joinTimes(line.weekday),
+    weekend: joinTimes(line.weekend),
+    returnWeekday: joinTimes(line.returnWeekday),
+    returnWeekend: joinTimes(line.returnWeekend),
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = () => {
+    onSave({
+      ...form,
+      id: form.id || Date.now().toString(),
+      tripTime: Number(form.tripTime),
+      weekday: parseTimes(form.weekday),
+      weekend: parseTimes(form.weekend),
+      returnWeekday: parseTimes(form.returnWeekday),
+      returnWeekend: parseTimes(form.returnWeekend),
+    });
+  };
+
+  return (
+    <Stack gap="sm">
+      <Group grow>
+        <TextInput label="Line name" placeholder="126 Bus to 42nd St" value={form.name} onChange={e => set('name', e.currentTarget.value)} />
+        <Select label="Type" value={form.type} onChange={v => set('type', v)} data={['bus','ferry','rail','subway','tram']} />
+      </Group>
+      <Group grow>
+        <TextInput label="From" placeholder="Hoboken Terminal" value={form.from} onChange={e => set('from', e.currentTarget.value)} />
+        <TextInput label="To" placeholder="Port Authority" value={form.to} onChange={e => set('to', e.currentTarget.value)} />
+      </Group>
+      <NumberInput label="Trip time (min)" value={form.tripTime} onChange={v => set('tripTime', v)} min={1} max={180} />
+      <Textarea label="Weekday departures (comma-separated)" placeholder="6:10 AM, 6:30 AM, 7:00 AM..." value={form.weekday} onChange={e => set('weekday', e.currentTarget.value)} minRows={2} autosize />
+      <Textarea label="Weekend departures" placeholder="8:00 AM, 8:30 AM..." value={form.weekend} onChange={e => set('weekend', e.currentTarget.value)} minRows={2} autosize />
+      <Textarea label="Return weekday departures" placeholder="6:00 AM, 6:30 AM..." value={form.returnWeekday} onChange={e => set('returnWeekday', e.currentTarget.value)} minRows={2} autosize />
+      <Textarea label="Return weekend departures" placeholder="7:00 AM, 7:30 AM..." value={form.returnWeekend} onChange={e => set('returnWeekend', e.currentTarget.value)} minRows={2} autosize />
+      <Group>
+        <Button size="xs" onClick={save} disabled={!form.name.trim()}>Save line</Button>
+        <Button size="xs" variant="default" onClick={onCancel}>Cancel</Button>
+      </Group>
+    </Stack>
+  );
+}
 
 const ALL_SECTIONS = [
   { id: 'weather',     label: 'Weather' },
@@ -28,6 +85,8 @@ export default function SettingsModal({ opened, onClose }) {
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinError, setPinError] = useState('');
   const [visible, setVisible] = useState(config.visible_sections || ALL_SECTIONS.map(s => s.id));
+  const [transitLines, setTransitLines] = useState(config.transit_lines || []);
+  const [editingLine, setEditingLine] = useState(null); // null | 'new' | line object
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');
 
@@ -79,6 +138,7 @@ export default function SettingsModal({ opened, onClose }) {
         <Tabs.List mb="md">
           <Tabs.Tab value="profile">Profile</Tabs.Tab>
           <Tabs.Tab value="location">Location</Tabs.Tab>
+          <Tabs.Tab value="transit">Transit</Tabs.Tab>
           <Tabs.Tab value="security">PIN</Tabs.Tab>
           <Tabs.Tab value="sections">Sections</Tabs.Tab>
         </Tabs.List>
@@ -114,6 +174,71 @@ export default function SettingsModal({ opened, onClose }) {
             <PinInput length={4} type="number" mask value={pinConfirm} onChange={setPinConfirm} />
             {pinError && <Text size="xs" c="red">{pinError}</Text>}
             <Button size="sm" onClick={savePin} loading={saving}>{saved === 'PIN' ? 'Saved!' : 'Save PIN'}</Button>
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="transit">
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">
+              Configure ferry, bus, or rail lines with custom schedules.
+              Leave empty to use the built-in Hoboken defaults.
+            </Text>
+            {transitLines.map((line, i) => (
+              <Box key={line.id}>
+                <Group justify="space-between" p="xs" style={{ background: 'var(--mantine-color-default-hover)', borderRadius: 6 }}>
+                  <Group gap="xs">
+                    <Badge size="xs" variant="light" color="blue">{line.type}</Badge>
+                    <Text size="sm" fw={500}>{line.name}</Text>
+                    <Text size="xs" c="dimmed">{line.from} → {line.to}</Text>
+                  </Group>
+                  <Group gap="xs">
+                    <ActionIcon size="sm" variant="default" onClick={() => setEditingLine(line)}>✏</ActionIcon>
+                    <ActionIcon size="sm" variant="default" color="red" onClick={() => {
+                      const next = transitLines.filter((_, j) => j !== i);
+                      setTransitLines(next);
+                    }}>✕</ActionIcon>
+                  </Group>
+                </Group>
+                {editingLine?.id === line.id && (
+                  <Box mt="xs" p="xs" style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 6 }}>
+                    <LineEditor
+                      line={editingLine}
+                      onSave={(updated) => {
+                        setTransitLines(prev => prev.map(l => l.id === updated.id ? updated : l));
+                        setEditingLine(null);
+                      }}
+                      onCancel={() => setEditingLine(null)}
+                    />
+                  </Box>
+                )}
+              </Box>
+            ))}
+            {editingLine === 'new' && (
+              <Box p="xs" style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 6 }}>
+                <LineEditor
+                  line={EMPTY_LINE}
+                  onSave={(newLine) => {
+                    setTransitLines(prev => [...prev, newLine]);
+                    setEditingLine(null);
+                  }}
+                  onCancel={() => setEditingLine(null)}
+                />
+              </Box>
+            )}
+            {editingLine !== 'new' && (
+              <Button size="xs" variant="default" onClick={() => setEditingLine('new')}>+ Add line</Button>
+            )}
+            <Divider />
+            <Group>
+              <Button size="sm" onClick={() => save({ transit_lines: transitLines }, 'transit')} loading={saving}>
+                {saved === 'transit' ? 'Saved!' : 'Save transit config'}
+              </Button>
+              {transitLines.length > 0 && (
+                <Button size="sm" variant="default" color="red" onClick={() => { setTransitLines([]); save({ transit_lines: [] }, 'transit'); }}>
+                  Reset to defaults
+                </Button>
+              )}
+            </Group>
           </Stack>
         </Tabs.Panel>
 

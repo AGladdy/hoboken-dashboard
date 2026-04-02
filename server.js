@@ -19,21 +19,69 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS strava_activities (
       id BIGINT PRIMARY KEY,
-      name TEXT,
-      type TEXT,
-      emoji TEXT,
-      date TEXT,
-      distance TEXT,
-      duration TEXT,
-      pace TEXT,
-      elevation INT,
-      heartrate INT,
-      calories INT,
-      moving_time INT,
-      start_date TIMESTAMPTZ,
+      name TEXT, type TEXT, emoji TEXT, date TEXT, distance TEXT,
+      duration TEXT, pace TEXT, elevation INT, heartrate INT,
+      calories INT, moving_time INT, start_date TIMESTAMPTZ,
       fetched_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS restaurants (
+      name TEXT, area TEXT, rating REAL, price INT, category TEXT,
+      address TEXT, photo TEXT, website TEXT,
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (name, area)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS events (
+      name TEXT PRIMARY KEY,
+      date TEXT, time TEXT, venue TEXT, category TEXT, genre TEXT,
+      image TEXT, url TEXT, price_min REAL, price_max REAL,
+      fetched_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sports (
+      id TEXT PRIMARY KEY,
+      data JSONB,
+      fetched_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stocks (
+      symbol TEXT, range_key TEXT,
+      rank INT, price REAL, change_val REAL, pct REAL, sparkline JSONB,
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (symbol, range_key)
+    )
+  `);
+
+  // Warm caches from DB on startup
+  try {
+    const rr = await pool.query("SELECT * FROM restaurants");
+    if (rr.rows.length > 0) { cachedRestaurants = rr.rows; lastRestaurantFetch = Date.now(); }
+  } catch {}
+  try {
+    const er = await pool.query("SELECT * FROM events WHERE date >= $1 ORDER BY date ASC", [new Date().toISOString().split("T")[0]]);
+    if (er.rows.length > 0) {
+      cachedEvents = er.rows.map(r => ({ name: r.name, date: r.date, time: r.time, venue: r.venue, category: r.category, genre: r.genre, image: r.image, url: r.url, priceMin: r.price_min, priceMax: r.price_max }));
+      lastEventFetch = Date.now();
+    }
+  } catch {}
+  try {
+    const sr = await pool.query("SELECT data FROM sports WHERE id = 'all'");
+    if (sr.rows.length > 0) { cachedSports = sr.rows[0].data; lastSportsFetch = Date.now(); }
+  } catch {}
+  try {
+    for (const rangeKey of ['1d','5d','1mo','1y']) {
+      const stockr = await pool.query("SELECT * FROM stocks WHERE range_key = $1 ORDER BY rank ASC", [rangeKey]);
+      if (stockr.rows.length > 0) {
+        cachedStocksMap[rangeKey] = stockr.rows.map(r => ({ rank: r.rank, symbol: r.symbol, price: r.price, change: r.change_val, pct: r.pct, sparkline: r.sparkline }));
+        lastStockFetchMap[rangeKey] = Date.now();
+      }
+    }
+  } catch {}
 }
 initDb().catch(e => console.error("DB init failed:", e.message));
 
@@ -142,7 +190,21 @@ async function fetchAndCacheStocks(rangeKey = '1mo') {
         sparkline: closes,
       };
     }).filter(Boolean);
-    if (result.length > 0) { cachedStocksMap[rangeKey] = result; lastStockFetchMap[rangeKey] = now; }
+    if (result.length > 0) {
+      cachedStocksMap[rangeKey] = result;
+      lastStockFetchMap[rangeKey] = now;
+      if (pool) {
+        try {
+          await pool.query("DELETE FROM stocks WHERE range_key = $1", [rangeKey]);
+          for (const s of result) {
+            await pool.query(
+              "INSERT INTO stocks (symbol, range_key, rank, price, change_val, pct, sparkline) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (symbol, range_key) DO UPDATE SET rank=$3, price=$4, change_val=$5, pct=$6, sparkline=$7, fetched_at=NOW()",
+              [s.symbol, rangeKey, s.rank, s.price, s.change, s.pct, JSON.stringify(s.sparkline)]
+            );
+          }
+        } catch (e) { console.error("Stocks DB write failed:", e.message); }
+      }
+    }
   } catch (e) {
     console.error("Stock fetch failed:", e.message);
   }
@@ -193,6 +255,17 @@ app.get("/api/restaurants", async (req, res) => {
     if (all.length > 0) {
       cachedRestaurants = all;
       lastRestaurantFetch = now;
+      if (pool) {
+        try {
+          await pool.query("DELETE FROM restaurants");
+          for (const r of all) {
+            await pool.query(
+              "INSERT INTO restaurants (name, area, rating, price, category, address, photo, website) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (name, area) DO UPDATE SET rating=$3, price=$4, category=$5, address=$6, photo=$7, website=$8, fetched_at=NOW()",
+              [r.name, r.area, r.rating, r.price, r.category, r.address, r.photo, r.website]
+            );
+          }
+        } catch (e) { console.error("Restaurants DB write failed:", e.message); }
+      }
     }
     res.json(cachedRestaurants || []);
   } catch (e) {
@@ -238,6 +311,17 @@ app.get("/api/events", async (req, res) => {
     if (deduped.length > 0) {
       cachedEvents = deduped;
       lastEventFetch = now;
+      if (pool) {
+        try {
+          await pool.query("DELETE FROM events");
+          for (const e of deduped) {
+            await pool.query(
+              "INSERT INTO events (name, date, time, venue, category, genre, image, url, price_min, price_max) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (name) DO UPDATE SET date=$2, time=$3, venue=$4, category=$5, genre=$6, image=$7, url=$8, price_min=$9, price_max=$10, fetched_at=NOW()",
+              [e.name, e.date, e.time, e.venue, e.category, e.genre, e.image, e.url, e.priceMin, e.priceMax]
+            );
+          }
+        } catch (e) { console.error("Events DB write failed:", e.message); }
+      }
     }
     res.json(cachedEvents || []);
   } catch (e) {
@@ -516,6 +600,14 @@ app.get("/api/sports", async (req, res) => {
   if (Object.values(result).some(r => r.teams.length > 0)) {
     cachedSports = result;
     lastSportsFetch = now;
+    if (pool) {
+      try {
+        await pool.query(
+          "INSERT INTO sports (id, data) VALUES ('all', $1) ON CONFLICT (id) DO UPDATE SET data=$1, fetched_at=NOW()",
+          [JSON.stringify(result)]
+        );
+      } catch (e) { console.error("Sports DB write failed:", e.message); }
+    }
   }
   res.json(cachedSports || {});
 });

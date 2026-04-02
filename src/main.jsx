@@ -6,6 +6,7 @@ import './index.css'
 import Dashboard from './Dashboard'
 import Onboarding from './Onboarding'
 import AuthPage from './AuthPage'
+import LandingPage from './LandingPage'
 import { ConfigProvider, useConfig } from './ConfigContext'
 import { AuthProvider, useAuth } from './AuthContext'
 
@@ -28,6 +29,7 @@ function App() {
   const { user, loading: authLoading } = useAuth();
   const { config, loading: configLoading } = useConfig();
   const [onboarded, setOnboarded] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     if (config.app_title) document.title = config.app_title;
@@ -41,7 +43,10 @@ function App() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  if (!user) {
+    if (!showAuth) return <LandingPage onGetStarted={() => setShowAuth(true)} />;
+    return <AuthPage />;
+  }
 
   const isFresh = !onboarded && config.display_name === 'User';
   if (isFresh) return <Onboarding onComplete={() => setOnboarded(true)} />;

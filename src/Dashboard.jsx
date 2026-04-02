@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PinInput } from "@mantine/core";
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import { useConfig, API_BASE } from "./ConfigContext";
+import { useAuth } from "./AuthContext";
 import SettingsModal from "./SettingsModal";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -229,6 +230,7 @@ export default function Dashboard() {
   const colorScheme = useComputedColorScheme("dark");
   const dark = colorScheme === "dark";
   const { config } = useConfig();
+  const { token } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [now, setNow] = useState(new Date());
@@ -389,12 +391,14 @@ export default function Dashboard() {
   const fetchWeatherNarrative = useCallback(async () => {
     const { lat, lon } = coordsRef.current;
     try {
-      const res = await fetch(`${CONFIG.WEATHER_NARRATIVE_API}?lat=${lat}&lon=${lon}`);
+      const res = await fetch(`${CONFIG.WEATHER_NARRATIVE_API}?lat=${lat}&lon=${lon}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.text) setWeatherNarrative(data.text);
     } catch (e) { console.error("Weather narrative fetch failed:", e); }
-  }, []);
+  }, [token]);
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -619,7 +623,10 @@ export default function Dashboard() {
             try {
               const res = await fetch(CONFIG.ASK_API, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({ query: currentQuery, history: askHistory }),
               });
               const data = await res.json();

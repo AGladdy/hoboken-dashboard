@@ -247,6 +247,14 @@ function requireAuth(req, res, next) {
   }
 }
 
+function optionalAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) {
+    try { req.user = jwt.verify(auth.slice(7), JWT_SECRET); } catch {}
+  }
+  next();
+}
+
 app.post("/api/auth/signup", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: "email and password required" });
@@ -628,15 +636,20 @@ Write a short, upbeat ${timePeriod} briefing in 3-4 sentences. For morning: cove
   }
 });
 
-let cachedWeatherNarrative = null;
-let lastWeatherNarrativeFetch = 0;
+const cachedWeatherNarrativeMap = {};
+const lastWeatherNarrativeFetchMap = {};
 
-app.get("/api/weather-narrative", async (req, res) => {
+app.get("/api/weather-narrative", optionalAuth, async (req, res) => {
   const now = Date.now();
-  if (cachedWeatherNarrative && now - lastWeatherNarrativeFetch < 1800000) return res.json(cachedWeatherNarrative);
+  const cacheKey = req.user?.userId || '__global__';
+  if (cachedWeatherNarrativeMap[cacheKey] && now - (lastWeatherNarrativeFetchMap[cacheKey] || 0) < 1800000) {
+    return res.json(cachedWeatherNarrativeMap[cacheKey]);
+  }
 
   try {
-    const { lat = 40.744, lon = -74.032 } = req.query;
+    const cfg = await getConfigForUser(req.user?.userId || null);
+    const lat = cfg.location?.lat ?? req.query.lat ?? 40.744;
+    const lon = cfg.location?.lon ?? req.query.lon ?? -74.032;
     const weatherRes = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m,apparent_temperature&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=2`
     );
@@ -659,12 +672,12 @@ Plain text only, no markdown.`;
       messages: [{ role: "user", content: prompt }],
     });
 
-    cachedWeatherNarrative = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
-    lastWeatherNarrativeFetch = now;
-    res.json(cachedWeatherNarrative);
+    cachedWeatherNarrativeMap[cacheKey] = { text: message.content[0].text.trim(), generatedAt: new Date().toISOString() };
+    lastWeatherNarrativeFetchMap[cacheKey] = now;
+    res.json(cachedWeatherNarrativeMap[cacheKey]);
   } catch (e) {
     console.error("Weather narrative failed:", e.message);
-    res.json(cachedWeatherNarrative || { text: "", generatedAt: new Date().toISOString() });
+    res.json(cachedWeatherNarrativeMap[cacheKey] || { text: "", generatedAt: new Date().toISOString() });
   }
 });
 
@@ -1139,12 +1152,12 @@ Plain text only, no markdown.`;
   }
 });
 
-app.post("/api/ask", async (req, res) => {
+app.post("/api/ask", optionalAuth, async (req, res) => {
   const { query, history = [] } = req.body || {};
   if (!query || !query.trim()) return res.status(400).json({ error: "query required" });
 
   try {
-    const cfg = await getConfig();
+    const cfg = await getConfigForUser(req.user?.userId || null);
     const name = cfg.display_name || "User";
     const { lat = 40.744, lon = -74.032, address = "Hoboken, NJ", city = "Hoboken, NJ" } = cfg.location || {};
     const [pathData, weatherRes] = await Promise.all([

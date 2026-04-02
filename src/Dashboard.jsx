@@ -363,7 +363,15 @@ export default function Dashboard() {
 
   const fetchRestaurants = useCallback(async () => {
     try {
-      const res = await fetch(CONFIG.RESTAURANTS_API);
+      let url = CONFIG.RESTAURANTS_API;
+      // Try to get GPS position first for truly nearby results
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        );
+        url += `?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
+      } catch {} // if denied or unavailable, fall back to config location
+      const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.length > 0) setRestaurants(data);
@@ -993,13 +1001,20 @@ export default function Dashboard() {
             );
             case 'restaurants': return (
               <Box key="restaurants">
-                <SectionHeader badge="Eat" badgeColor="orange" title="Where to Eat" dragHandle={dh}
-                  right={<SegmentedControl size="xs" value={restaurantArea} onChange={setRestaurantArea} data={["Hoboken", "Manhattan"]} />}
-                />
+                {(() => {
+                  const hasNearby = restaurants.some(r => r.area === "Nearby");
+                  const areas = [...new Set(restaurants.map(r => r.area))].filter(a => a !== "Nearby");
+                  return (
+                    <SectionHeader badge="Eat" badgeColor="orange"
+                      title={hasNearby ? "Nearby Restaurants" : "Where to Eat"} dragHandle={dh}
+                      right={!hasNearby && areas.length > 1 ? <SegmentedControl size="xs" value={restaurantArea} onChange={setRestaurantArea} data={areas} /> : null}
+                    />
+                  );
+                })()}
                 {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
                 {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
                   <Stack gap="xs" mb="md">
-                    {restaurants.filter(r => r.area === restaurantArea).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8).map((r, i) => (
+                    {(restaurants.some(r => r.area === "Nearby") ? restaurants : restaurants.filter(r => r.area === restaurantArea)).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8).map((r, i) => (
                       <Box key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", borderRadius: 8, background: "var(--mantine-color-default-hover)" }}>
                         {r.photo
                           ? <img src={r.photo} alt={r.name} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />

@@ -515,11 +515,46 @@ const DEFAULT_RESTAURANT_LOCATIONS = [
 
 let cachedRestaurants = null;
 let lastRestaurantFetch = 0;
+const cachedRestaurantsByLoc = {};
 
-app.get("/api/restaurants", async (req, res) => {
+app.get("/api/restaurants", optionalAuth, async (req, res) => {
   const now = Date.now();
-  if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
+  const gpsLat = req.query.lat ? parseFloat(req.query.lat) : null;
+  const gpsLon = req.query.lon ? parseFloat(req.query.lon) : null;
 
+  // If GPS coords provided, fetch live nearby results (short cache per coord pair)
+  if (gpsLat && gpsLon) {
+    const locKey = `${gpsLat.toFixed(3)},${gpsLon.toFixed(3)}`;
+    const cached = cachedRestaurantsByLoc[locKey];
+    if (cached && now - cached.ts < 3600000) return res.json(cached.data);
+    try {
+      const NON_RESTAURANT = /bar|pub|brewery|lounge|nightclub|club|cafe|coffee|bakery|dessert|ice cream|juice|smoothie|food truck|market|grocery|deli|bodega|convenience/i;
+      const url = `https://places-api.foursquare.com/places/search?ll=${gpsLat},${gpsLon}&radius=800&categories=13065,13031,13236,13064&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
+      if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
+      const data = await r.json();
+      const results = (data.results || [])
+        .filter(place => !NON_RESTAURANT.test(place.categories?.[0]?.name || ""))
+        .map(place => ({
+          name: place.name,
+          area: "Nearby",
+          rating: place.rating || null,
+          price: place.price || null,
+          category: place.categories?.[0]?.name || "Restaurant",
+          address: place.location?.formatted_address || place.location?.address || "",
+          photo: place.photos?.[0] ? `${place.photos[0].prefix}300x200${place.photos[0].suffix}` : null,
+          website: place.website || null,
+        }));
+      cachedRestaurantsByLoc[locKey] = { ts: now, data: results };
+      return res.json(results);
+    } catch (e) {
+      console.error("GPS restaurant fetch failed:", e.message);
+      return res.json([]);
+    }
+  }
+
+  // Fallback: use config location
+  if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
   try {
     const cfg = await getConfig();
     const locations = cfg.restaurant_locations || DEFAULT_RESTAURANT_LOCATIONS;

@@ -6,6 +6,7 @@ import SettingsModal from "./SettingsModal";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
+import ReactMarkdown from "react-markdown";
 import "@mantine/charts/styles.css";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
@@ -686,9 +687,13 @@ export default function Dashboard() {
                     <Text size="xs" fw={600} c={isUser ? "dimmed" : "violet"} mb={2}>
                       {isUser ? "You" : "✦ Gladdy"}
                     </Text>
-                    <Text size="sm" lh={1.6} style={{ whiteSpace: "pre-wrap" }}>
-                      {h.content}
-                    </Text>
+                    {isUser ? (
+                      <Text size="sm" lh={1.6}>{h.content}</Text>
+                    ) : (
+                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                        <ReactMarkdown>{h.content}</ReactMarkdown>
+                      </div>
+                    )}
                   </Box>
                 </Box>
               );

@@ -5,10 +5,7 @@ import { XMLParser } from "fast-xml-parser";
 import pkg from "pg";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Resend } from "resend";
 const { Pool } = pkg;
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const app = express();
 app.use(cors());
@@ -76,14 +73,6 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS password_resets (
-      token TEXT PRIMARY KEY,
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
   // Additive migrations — safe to run repeatedly
   await pool.query(`ALTER TABLE user_config ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)`);
   // Migration: convert user_config to per-user rows
@@ -115,13 +104,13 @@ async function initDb() {
   // Warm caches from DB on startup
   try {
     const rr = await pool.query("SELECT * FROM restaurants");
-    if (rr.rows.length > 0) { cachedRestaurantsMap['__global__'] = rr.rows; lastRestaurantFetchMap_r['__global__'] = Date.now(); }
+    if (rr.rows.length > 0) { cachedRestaurants = rr.rows; lastRestaurantFetch = Date.now(); }
   } catch {}
   try {
     const er = await pool.query("SELECT * FROM events WHERE date >= $1 ORDER BY date ASC", [new Date().toISOString().split("T")[0]]);
     if (er.rows.length > 0) {
-      cachedEventsMap['__global__'] = er.rows.map(r => ({ name: r.name, date: r.date, time: r.time, venue: r.venue, category: r.category, genre: r.genre, image: r.image, url: r.url, priceMin: r.price_min, priceMax: r.price_max }));
-      lastEventFetchMap['__global__'] = Date.now();
+      cachedEvents = er.rows.map(r => ({ name: r.name, date: r.date, time: r.time, venue: r.venue, category: r.category, genre: r.genre, image: r.image, url: r.url, priceMin: r.price_min, priceMax: r.price_max }));
+      lastEventFetch = Date.now();
     }
   } catch {}
   try {
@@ -325,57 +314,6 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ userId: req.user.userId, email: req.user.email });
 });
 
-app.post("/api/auth/forgot-password", async (req, res) => {
-  const { email } = req.body || {};
-  if (!email) return res.status(400).json({ error: "email required" });
-  if (!pool) return res.status(503).json({ error: "database unavailable" });
-  // Always respond OK to prevent email enumeration
-  res.json({ ok: true });
-  try {
-    const result = await pool.query("SELECT id FROM users WHERE email = $1", [email.toLowerCase().trim()]);
-    if (result.rows.length === 0) return;
-    const userId = result.rows[0].id;
-    const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2,'0')).join('');
-    const expires = new Date(Date.now() + 3600000); // 1 hour
-    await pool.query("DELETE FROM password_resets WHERE user_id = $1", [userId]);
-    await pool.query("INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)", [token, userId, expires]);
-    if (resend) {
-      const resetUrl = `${process.env.FRONTEND_URL || 'https://www.gladdy.life'}?reset_token=${token}`;
-      await resend.emails.send({
-        from: process.env.EMAIL_FROM || 'noreply@yourdomain.com',
-        to: email.toLowerCase().trim(),
-        subject: 'Reset your password',
-        html: `<p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, you can ignore this email.</p>`,
-      });
-    } else {
-      console.log(`[password-reset] token for ${email}: ${token}`);
-    }
-  } catch (e) {
-    console.error("Forgot password failed:", e.message);
-  }
-});
-
-app.post("/api/auth/reset-password", async (req, res) => {
-  const { token, password } = req.body || {};
-  if (!token || !password) return res.status(400).json({ error: "token and password required" });
-  if (password.length < 8) return res.status(400).json({ error: "password must be at least 8 characters" });
-  if (!pool) return res.status(503).json({ error: "database unavailable" });
-  try {
-    const result = await pool.query(
-      "SELECT user_id FROM password_resets WHERE token = $1 AND expires_at > NOW()",
-      [token]
-    );
-    if (result.rows.length === 0) return res.status(400).json({ error: "invalid or expired reset link" });
-    const userId = result.rows[0].user_id;
-    const hash = await bcrypt.hash(password, 10);
-    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, userId]);
-    await pool.query("DELETE FROM password_resets WHERE user_id = $1", [userId]);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("Reset password failed:", e.message);
-    res.status(500).json({ error: "reset failed" });
-  }
-});
 
 const PANYNJ_API = "https://www.panynj.gov/bin/portauthority/ridepath.json";
 
@@ -514,20 +452,16 @@ const DEFAULT_RESTAURANT_LOCATIONS = [
   { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
 ];
 
-const cachedRestaurantsMap = {};
-const lastRestaurantFetchMap_r = {};
+let cachedRestaurants = null;
+let lastRestaurantFetch = 0;
 
-app.get("/api/restaurants", optionalAuth, async (req, res) => {
+app.get("/api/restaurants", async (req, res) => {
   const now = Date.now();
-  const rKey = req.user?.userId || '__global__';
-  if (cachedRestaurantsMap[rKey] && now - (lastRestaurantFetchMap_r[rKey] || 0) < 3600000) return res.json(cachedRestaurantsMap[rKey]);
+  if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
 
   try {
-    const cfg = await getConfigForUser(req.user?.userId || null);
-    const locations = cfg.restaurant_locations || (() => {
-      const { lat = 40.744, lon = -74.032, city = 'Nearby' } = cfg.location || {};
-      return [{ label: city, ll: `${lat},${lon}`, radius: 2000 }];
-    })();
+    const cfg = await getConfig();
+    const locations = cfg.restaurant_locations || DEFAULT_RESTAURANT_LOCATIONS;
     const all = [];
     for (const loc of locations) {
       const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065,13031,13236,13064&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website,tel`;
@@ -551,8 +485,8 @@ app.get("/api/restaurants", optionalAuth, async (req, res) => {
       }
     }
     if (all.length > 0) {
-      cachedRestaurantsMap[rKey] = all;
-      lastRestaurantFetchMap_r[rKey] = now;
+      cachedRestaurants = all;
+      lastRestaurantFetch = now;
       if (pool) {
         try {
           await pool.query("DELETE FROM restaurants");
@@ -565,28 +499,25 @@ app.get("/api/restaurants", optionalAuth, async (req, res) => {
         } catch (e) { console.error("Restaurants DB write failed:", e.message); }
       }
     }
-    res.json(cachedRestaurantsMap[rKey] || []);
+    res.json(cachedRestaurants || []);
   } catch (e) {
     console.error("Restaurant fetch failed:", e.message);
-    res.json(cachedRestaurantsMap[rKey] || []);
+    res.json(cachedRestaurants || []);
   }
 });
 
 const TICKETMASTER_KEY = process.env.TICKETMASTER_KEY;
-const cachedEventsMap = {};
-const lastEventFetchMap = {};
+let cachedEvents = null;
+let lastEventFetch = 0;
 
-app.get("/api/events", optionalAuth, async (req, res) => {
+app.get("/api/events", async (req, res) => {
   const now = Date.now();
-  const eKey = req.user?.userId || '__global__';
-  if (cachedEventsMap[eKey] && now - (lastEventFetchMap[eKey] || 0) < 3600000) return res.json(cachedEventsMap[eKey]);
+  if (cachedEvents && now - lastEventFetch < 3600000) return res.json(cachedEvents);
 
   try {
-    const cfg = await getConfigForUser(req.user?.userId || null);
-    const { lat = 40.744, lon = -74.032 } = cfg.location || {};
     const start = new Date().toISOString().split(".")[0] + "Z";
     const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().split(".")[0] + "Z";
-    const url = `https://app.ticketmaster.com/discovery/v2/events.json?latlong=${lat},${lon}&radius=50&unit=miles&startDateTime=${start}&endDateTime=${end}&size=50&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?city=New+York&countryCode=US&startDateTime=${start}&endDateTime=${end}&size=50&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`Ticketmaster HTTP ${r.status}`);
     const data = await r.json();
@@ -610,8 +541,8 @@ app.get("/api/events", optionalAuth, async (req, res) => {
       return true;
     });
     if (deduped.length > 0) {
-      cachedEventsMap[eKey] = deduped;
-      lastEventFetchMap[eKey] = now;
+      cachedEvents = deduped;
+      lastEventFetch = now;
       if (pool) {
         try {
           await pool.query("DELETE FROM events");
@@ -624,10 +555,10 @@ app.get("/api/events", optionalAuth, async (req, res) => {
         } catch (e) { console.error("Events DB write failed:", e.message); }
       }
     }
-    res.json(cachedEventsMap[eKey] || []);
+    res.json(cachedEvents || []);
   } catch (e) {
     console.error("Events fetch failed:", e.message);
-    res.json(cachedEventsMap[eKey] || []);
+    res.json(cachedEvents || []);
   }
 });
 
@@ -660,7 +591,7 @@ app.get("/api/briefing", async (req, res) => {
     const toNYMsgs = hob?.destinations?.find(d => d.label === "ToNY")?.messages || [];
     const pathRes = { toNY: toNYMsgs.map(m => ({ headsign: m.headSign, secondsAway: parseInt(m.secondsToArrival, 10) })) };
     const stocksRes = cachedStocksMap['1mo'] || [];
-    const eventsRes = cachedEventsMap['__global__'] || [];
+    const eventsRes = cachedEvents || [];
 
     const temp = weatherRes?.current?.temperature_2m;
     const wind = weatherRes?.current?.windspeed_10m;
@@ -1044,8 +975,7 @@ let lastRestaurantPickFetch = 0;
 app.get("/api/restaurant-pick", async (req, res) => {
   const now = Date.now();
   if (cachedRestaurantPick && now - lastRestaurantPickFetch < 10800000) return res.json(cachedRestaurantPick);
-  const _restaurantsForPick = cachedRestaurantsMap['__global__'];
-  if (!_restaurantsForPick || _restaurantsForPick.length === 0) return res.json({ text: "" });
+  if (!cachedRestaurants || cachedRestaurants.length === 0) return res.json({ text: "" });
 
   try {
     const hour = new Date().toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false });
@@ -1053,7 +983,7 @@ app.get("/api/restaurant-pick", async (req, res) => {
     const weatherRes = await fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode&temperature_unit=fahrenheit&timezone=America/New_York").then(r => r.json()).catch(() => ({}));
     const temp = weatherRes?.current?.temperature_2m;
 
-    const picks = _restaurantsForPick
+    const picks = cachedRestaurants
       .filter(r => r.rating)
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 20)
@@ -1089,13 +1019,12 @@ app.get("/api/event-picks", async (req, res) => {
   const now = Date.now();
   if (cachedEventPicks && now - lastEventPicksFetch < 10800000) return res.json(cachedEventPicks);
 
-  const _eventsForPick = cachedEventsMap['__global__'];
-  if (!_eventsForPick || _eventsForPick.length === 0) return res.json({ text: "" });
+  if (!cachedEvents || cachedEvents.length === 0) return res.json({ text: "" });
 
   try {
     const today = new Date();
     const weekOut = new Date(now + 7 * 24 * 60 * 60 * 1000);
-    const upcoming = _eventsForPick
+    const upcoming = cachedEvents
       .filter(e => {
         if (!e.date) return false;
         const d = new Date(e.date + "T12:00:00");
@@ -1188,12 +1117,12 @@ app.get("/api/day-plan", async (req, res) => {
     const loTemp = weatherRes?.daily?.temperature_2m_min?.[0];
 
     const todayStr = new Date().toISOString().split("T")[0];
-    const todayEvents = (cachedEventsMap['__global__'] || [])
+    const todayEvents = (cachedEvents || [])
       .filter(e => e.date === todayStr)
       .slice(0, 5)
       .map(e => `${e.name}${e.time ? " at " + e.time : ""}${e.venue ? " @ " + e.venue : ""}`);
 
-    const topRestaurants = (cachedRestaurantsMap['__global__'] || [])
+    const topRestaurants = (cachedRestaurants || [])
       .filter(r => r.rating)
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 3)
@@ -1263,13 +1192,13 @@ app.post("/api/ask", optionalAuth, async (req, res) => {
 
     // Events
     const todayStr = new Date().toISOString().split("T")[0];
-    const upcomingEvents = (cachedEventsMap[req.user?.userId || '__global__'] || cachedEventsMap['__global__'] || [])
+    const upcomingEvents = (cachedEvents || [])
       .filter(e => e.date >= todayStr)
       .slice(0, 10)
       .map(e => `${e.name} on ${e.date}${e.time ? " at " + e.time : ""}${e.venue ? " @ " + e.venue : ""}${e.priceMin ? " from $" + Math.round(e.priceMin) : ""}`);
 
     // Restaurants
-    const restaurants = (cachedRestaurantsMap[req.user?.userId || '__global__'] || cachedRestaurantsMap['__global__'] || [])
+    const restaurants = (cachedRestaurants || [])
       .filter(r => r.rating)
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 10)
@@ -1467,7 +1396,7 @@ app.get("/api/strava/connect", (req, res) => {
 
 app.get("/api/strava/callback", async (req, res) => {
   const { code, state: userId } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || 'https://www.gladdy.life';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://main.d2s6v9m1z5h8k3.amplifyapp.com';
   if (!code || !userId) return res.redirect(`${frontendUrl}?strava_error=invalid`);
   try {
     const r = await fetch("https://www.strava.com/oauth/token", {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge } from '@mantine/core';
+import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box } from '@mantine/core';
 import { useConfig } from './ConfigContext';
 import { useAuth } from './AuthContext';
 

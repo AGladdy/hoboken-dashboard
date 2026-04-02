@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PinInput } from "@mantine/core";
-import { CORRECT_PIN } from "./config";
 import { DndContext, closestCenter } from "@dnd-kit/core";
+import { useConfig, API_BASE } from "./ConfigContext";
+import SettingsModal from "./SettingsModal";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
@@ -15,17 +16,17 @@ import {
 
 // ========== CONFIG ==========
 const CONFIG = {
-  PATH_API: "https://hoboken-dashboard-production.up.railway.app/api/path/hoboken",
-  STOCKS_API: "https://hoboken-dashboard-production.up.railway.app/api/stocks",
-  RESTAURANTS_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurants",
-  EVENTS_API: "https://hoboken-dashboard-production.up.railway.app/api/events",
-  NEWS_API: "https://hoboken-dashboard-production.up.railway.app/api/news",
-  SPORTS_API: "https://hoboken-dashboard-production.up.railway.app/api/sports",
-  WEATHER_NARRATIVE_API: "https://hoboken-dashboard-production.up.railway.app/api/weather-narrative",
-  SPORTS_RECAP_API: "https://hoboken-dashboard-production.up.railway.app/api/sports-recap",
-  ASK_API: "https://hoboken-dashboard-production.up.railway.app/api/ask",
-  STRAVA_API: "https://hoboken-dashboard-production.up.railway.app/api/strava",
-  RESTAURANT_PICK_API: "https://hoboken-dashboard-production.up.railway.app/api/restaurant-pick",
+  PATH_API: `${API_BASE}/api/path/hoboken`,
+  STOCKS_API: `${API_BASE}/api/stocks`,
+  RESTAURANTS_API: `${API_BASE}/api/restaurants`,
+  EVENTS_API: `${API_BASE}/api/events`,
+  NEWS_API: `${API_BASE}/api/news`,
+  SPORTS_API: `${API_BASE}/api/sports`,
+  WEATHER_NARRATIVE_API: `${API_BASE}/api/weather-narrative`,
+  SPORTS_RECAP_API: `${API_BASE}/api/sports-recap`,
+  ASK_API: `${API_BASE}/api/ask`,
+  STRAVA_API: `${API_BASE}/api/strava`,
+  RESTAURANT_PICK_API: `${API_BASE}/api/restaurant-pick`,
   WEATHER_API: (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=5`,
   REFRESH_INTERVAL: 300000,
 };
@@ -227,14 +228,16 @@ export default function Dashboard() {
   const { setColorScheme } = useMantineColorScheme();
   const colorScheme = useComputedColorScheme("dark");
   const dark = colorScheme === "dark";
+  const { config } = useConfig();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [now, setNow] = useState(new Date());
   const [pathTrains, setPathTrains] = useState({ toNY: [], toNJ: [], toNJFrom33S: [], fetchedAt: null });
   const [pathLive, setPathLive] = useState(false);
   const [pathUpdated, setPathUpdated] = useState(null);
   const [weather, setWeather] = useState(null);
-  const coordsRef = useRef({ lat: 40.744, lon: -74.032 });
-  const [locationLabel, setLocationLabel] = useState("Hoboken, NJ");
+  const coordsRef = useRef({ lat: config.location?.lat ?? 40.744, lon: config.location?.lon ?? -74.032 });
+  const [locationLabel, setLocationLabel] = useState(config.location?.city || "Hoboken, NJ");
   const [stocks, setStocks] = useState([]);
   const [stockPage, setStockPage] = useState(0);
   const [restaurants, setRestaurants] = useState([]);
@@ -499,7 +502,7 @@ export default function Dashboard() {
       {/* HEADER */}
       <Group justify="space-between" mb="md" wrap="nowrap" gap="xs">
         <Text fw={700} size="lg" style={{ flexShrink: 0 }}>
-          {(() => { const h = now.getHours(); return h < 12 ? "Good morning, Adam" : h < 17 ? "Good afternoon, Adam" : "Good evening, Adam"; })()}
+          {(() => { const h = now.getHours(); const n = config.display_name || "there"; return h < 12 ? `Good morning, ${n}` : h < 17 ? `Good afternoon, ${n}` : `Good evening, ${n}`; })()}
         </Text>
         <Group gap="xs" wrap="nowrap" justify="flex-end">
           <Text size="sm" c="dimmed" ff="monospace" visibleFrom="sm">
@@ -514,6 +517,7 @@ export default function Dashboard() {
               setRightOrder(DEFAULT_RIGHT);
             }}
           >Reset Layout</Button>
+          <Button size="xs" variant="default" onClick={() => setSettingsOpen(true)}>⚙</Button>
           <Button
             size="xs" variant="default"
             onClick={() => setColorScheme(dark ? "light" : "dark")}
@@ -522,6 +526,7 @@ export default function Dashboard() {
           </Button>
         </Group>
       </Group>
+      <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* HERO BAR */}
       <SimpleGrid cols={{ base: 2, sm: 4 }} mb="md">
@@ -574,12 +579,23 @@ export default function Dashboard() {
               mask
               autoFocus
               error={askPinError}
-              onComplete={(val) => {
-                if (val === CORRECT_PIN) {
-                  setAskCount(0);
-                  setAskLocked(false);
-                  setAskPinError(false);
-                } else {
+              onComplete={async (val) => {
+                try {
+                  const res = await fetch(`${API_BASE}/api/config/verify-pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: val }),
+                  });
+                  const { valid } = await res.json();
+                  if (valid) {
+                    setAskCount(0);
+                    setAskLocked(false);
+                    setAskPinError(false);
+                  } else {
+                    setAskPinError(true);
+                    setTimeout(() => setAskPinError(false), 1000);
+                  }
+                } catch {
                   setAskPinError(true);
                   setTimeout(() => setAskPinError(false), 1000);
                 }
@@ -656,7 +672,9 @@ export default function Dashboard() {
 
       {/* TWO-COLUMN GRID */}
       {(() => {
+        const visibleSections = config.visible_sections || null;
         const renderSection = (id, dh) => {
+          if (visibleSections && !visibleSections.includes(id)) return null;
           switch (id) {
             case 'weather': return (
               <Box key="weather">

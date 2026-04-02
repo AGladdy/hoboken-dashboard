@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s http://localhost:3002/api/stocks)"
+      "Bash(curl -s http://localhost:3002/api/stocks)",
+      "WebFetch(domain:www.nywaterway.com)"
     ]
   }
 }

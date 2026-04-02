@@ -3,6 +3,7 @@ import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
 import { XMLParser } from "fast-xml-parser";
 import pkg from "pg";
+import bcrypt from "bcryptjs";
 const { Pool } = pkg;
 
 const app = express();
@@ -56,6 +57,24 @@ async function initDb() {
       PRIMARY KEY (symbol, range_key)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_config (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // Seed defaults (won't overwrite existing)
+  const defaults = [
+    ['display_name', '"User"'],
+    ['app_title', '"My Dashboard"'],
+    ['pin_hash', '""'],
+    ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"Hoboken, NJ"}'],
+    ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+  ];
+  for (const [key, val] of defaults) {
+    await pool.query("INSERT INTO user_config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO NOTHING", [key, val]);
+  }
 
   // Warm caches from DB on startup
   try {
@@ -84,6 +103,69 @@ async function initDb() {
   } catch {}
 }
 initDb().catch(e => console.error("DB init failed:", e.message));
+
+// ========== USER CONFIG ==========
+let cachedConfig = null;
+
+const DEFAULT_CONFIG = {
+  display_name: "User",
+  app_title: "My Dashboard",
+  pin_hash: "",
+  location: { city: "Hoboken, NJ", lat: 40.744, lon: -74.032, address: "Hoboken, NJ" },
+  visible_sections: ["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"],
+};
+
+async function getConfig() {
+  if (cachedConfig) return cachedConfig;
+  if (!pool) return { ...DEFAULT_CONFIG };
+  try {
+    const { rows } = await pool.query("SELECT key, value FROM user_config");
+    cachedConfig = { ...DEFAULT_CONFIG, ...Object.fromEntries(rows.map(r => [r.key, r.value])) };
+    return cachedConfig;
+  } catch {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+app.get("/api/config", async (req, res) => {
+  const cfg = await getConfig();
+  const { pin_hash, ...safe } = cfg;
+  safe.pin_hash_set = Boolean(pin_hash);
+  res.json(safe);
+});
+
+app.post("/api/config", async (req, res) => {
+  const patch = req.body || {};
+  const updates = { ...patch };
+  if (updates.pin !== undefined) {
+    updates.pin_hash = updates.pin ? await bcrypt.hash(String(updates.pin), 10) : "";
+    delete updates.pin;
+  }
+  if (pool) {
+    try {
+      for (const [key, value] of Object.entries(updates)) {
+        await pool.query(
+          "INSERT INTO user_config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value=$2::jsonb, updated_at=NOW()",
+          [key, JSON.stringify(value)]
+        );
+      }
+    } catch (e) { console.error("Config write failed:", e.message); }
+  }
+  cachedConfig = null; // invalidate
+  const cfg = await getConfig();
+  const { pin_hash, ...safe } = cfg;
+  res.json(safe);
+});
+
+app.post("/api/config/verify-pin", async (req, res) => {
+  const { pin } = req.body || {};
+  if (!pin) return res.json({ valid: false });
+  const cfg = await getConfig();
+  if (!cfg.pin_hash) return res.json({ valid: true }); // no PIN set
+  const valid = await bcrypt.compare(String(pin), cfg.pin_hash);
+  res.json({ valid });
+});
+
 
 const PANYNJ_API = "https://www.panynj.gov/bin/portauthority/ridepath.json";
 
@@ -217,7 +299,7 @@ app.get("/api/stocks", async (req, res) => {
 });
 
 const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;
-const RESTAURANT_LOCATIONS = [
+const DEFAULT_RESTAURANT_LOCATIONS = [
   { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
   { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
 ];
@@ -230,8 +312,10 @@ app.get("/api/restaurants", async (req, res) => {
   if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
 
   try {
+    const cfg = await getConfig();
+    const locations = cfg.restaurant_locations || DEFAULT_RESTAURANT_LOCATIONS;
     const all = [];
-    for (const loc of RESTAURANT_LOCATIONS) {
+    for (const loc of locations) {
       const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065,13031,13236,13064&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website,tel`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
       if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
@@ -346,10 +430,13 @@ app.get("/api/briefing", async (req, res) => {
   if (cachedBriefing && lastBriefingPeriod === period) return res.json(cachedBriefing);
 
   try {
+    const cfg = await getConfig();
+    const name = cfg.display_name || "User";
+    const { lat = 40.744, lon = -74.032, city = "Hoboken, NJ" } = cfg.location || {};
     // Gather context from cached data and external APIs
     const [pathData, weatherRes] = await Promise.all([
       fetchPathData().catch(() => ({ results: [] })),
-      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America/New_York&forecast_days=2").then(r => r.json()).catch(() => ({})),
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=2`).then(r => r.json()).catch(() => ({})),
     ]);
 
     const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
@@ -370,9 +457,9 @@ app.get("/api/briefing", async (req, res) => {
 
     const timePeriod = getTimePeriod();
     const greeting = timePeriod === "morning" ? "Good morning" : timePeriod === "afternoon" ? "Good afternoon" : "Good evening";
-    const prompt = `You are a friendly ${timePeriod} assistant for Adam, who lives in Hoboken, NJ and commutes to NYC.
+    const prompt = `You are a friendly ${timePeriod} assistant for ${name}, who lives in ${city} and commutes to NYC.
 
-Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} (${timePeriod}). Start the briefing with "${greeting}, Adam!".
+Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} (${timePeriod}). Start the briefing with "${greeting}, ${name}!".
 
 Current conditions:
 - Weather: ${temp}°F, high ${hiTemp}°F / low ${loTemp}°F, wind ${wind} mph, ${rainChance}% chance of rain
@@ -620,9 +707,12 @@ app.get("/api/commute-advice", async (req, res) => {
   if (cachedCommuteAdvice && now - lastCommuteAdviceFetch < 300000) return res.json(cachedCommuteAdvice);
 
   try {
+    const cfg = await getConfig();
+    const { lat = 40.744, lon = -74.032, city = "Hoboken, NJ" } = cfg.location || {};
+    const name = cfg.display_name || "User";
     const [pathData, weatherRes] = await Promise.all([
       fetchPathData().catch(() => ({ results: [] })),
-      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,precipitation&hourly=precipitation_probability&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=1").then(r => r.json()).catch(() => ({})),
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,precipitation&hourly=precipitation_probability&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`).then(r => r.json()).catch(() => ({})),
     ]);
 
     const hob = (pathData.results || []).find(s => s.consideredStation === "HOB");
@@ -642,7 +732,7 @@ app.get("/api/commute-advice", async (req, res) => {
       ? next3Path.map(t => `${t.headsign} in ${t.minsAway} min`).join(", ")
       : "no PATH data";
 
-    const prompt = `You are a commute assistant for Adam in Hoboken, NJ. Give a single-sentence commute recommendation.
+    const prompt = `You are a commute assistant for ${name} in ${city}. Give a single-sentence commute recommendation.
 
 Next PATH trains to NYC: ${pathSummary}
 Current temp: ${currentTemp != null ? currentTemp + "°F" : "unknown"}
@@ -914,9 +1004,12 @@ app.post("/api/ask", async (req, res) => {
   if (!query || !query.trim()) return res.status(400).json({ error: "query required" });
 
   try {
+    const cfg = await getConfig();
+    const name = cfg.display_name || "User";
+    const { lat = 40.744, lon = -74.032, address = "Hoboken, NJ", city = "Hoboken, NJ" } = cfg.location || {};
     const [pathData, weatherRes] = await Promise.all([
       fetchPathData().catch(() => ({ results: [] })),
-      fetch("https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&timezone=America/New_York&forecast_days=3").then(r => r.json()).catch(() => ({})),
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&timezone=auto&forecast_days=3`).then(r => r.json()).catch(() => ({})),
     ]);
 
     // PATH trains
@@ -977,11 +1070,11 @@ app.post("/api/ask", async (req, res) => {
       return `Weekly workouts: ${cachedStrava.weeklyCount} | Recent: ${recent}${totalCal ? " | Total calories: " + totalCal : ""}`;
     })() : "no data";
 
-    const systemPrompt = `You are Adam's personal assistant. Adam lives at 205 Hudson Street, Hoboken, NJ. Be helpful and thorough — 5-10 sentences when useful, shorter for simple questions. Use web search for anything needing current information. Reference the dashboard data below directly when relevant.
+    const systemPrompt = `You are ${name}'s personal assistant. ${name} lives at ${address}. Be helpful and thorough — 5-10 sentences when useful, shorter for simple questions. Use web search for anything needing current information. Reference the dashboard data below directly when relevant.
 
 === LIVE DASHBOARD DATA ===
 
-WEATHER (Hoboken, NJ):
+WEATHER (${city}):
 - Now: ${temp != null ? temp + "°F" : "unknown"}, wind ${wind != null ? wind + " mph" : "unknown"}
 - Today: High ${hiTemp != null ? hiTemp + "°F" : "?"} / Low ${loTemp != null ? loTemp + "°F" : "?"}, rain ${rainPct != null ? rainPct + "%" : "?"}
 - Tomorrow: High ${tomorrowHi != null ? tomorrowHi + "°F" : "?"}, rain ${tomorrowRain != null ? tomorrowRain + "%" : "?"}

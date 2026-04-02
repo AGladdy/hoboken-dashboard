@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { MantineProvider, createTheme } from '@mantine/core'
+import { MantineProvider, createTheme, Box, Loader } from '@mantine/core'
 import '@mantine/core/styles.css'
 import './index.css'
 import Dashboard from './Dashboard'
+import Onboarding from './Onboarding'
 import { ConfigProvider, useConfig } from './ConfigContext'
 
 const theme = createTheme({
@@ -22,11 +23,23 @@ const cssVariablesResolver = () => ({
 })
 
 function App() {
-  const { config } = useConfig();
+  const { config, loading } = useConfig();
+  const [onboarded, setOnboarded] = useState(false);
 
   useEffect(() => {
     if (config.app_title) document.title = config.app_title;
   }, [config.app_title]);
+
+  if (loading) {
+    return (
+      <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="sm" />
+      </Box>
+    );
+  }
+
+  const isFresh = !onboarded && config.display_name === 'User';
+  if (isFresh) return <Onboarding onComplete={() => setOnboarded(true)} />;
 
   return <Dashboard />;
 }

@@ -1474,15 +1474,12 @@ app.get("/api/strava/callback", async (req, res) => {
     if (!data.access_token) throw new Error(data.message || "Token exchange failed");
     const athleteId = data.athlete?.id;
 
-    // Check if this Strava account is already connected to a different user
+    // If this Strava account is linked to a different user, remove it from that user first
     if (pool && athleteId) {
-      const existing = await pool.query(
-        `SELECT user_id FROM user_config WHERE key = 'strava_tokens' AND value->>'athlete_id' = $1 AND user_id IS NOT NULL AND user_id != $2`,
+      await pool.query(
+        `DELETE FROM user_config WHERE key = 'strava_tokens' AND value->>'athlete_id' = $1 AND user_id IS NOT NULL AND user_id != $2`,
         [String(athleteId), userId]
       );
-      if (existing.rows.length > 0) {
-        return res.redirect(`${frontendUrl}?strava_error=${encodeURIComponent("This Strava account is already connected to another user.")}`);
-      }
     }
 
     const tokens = {

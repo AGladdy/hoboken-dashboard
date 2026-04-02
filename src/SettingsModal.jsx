@@ -87,6 +87,7 @@ export default function SettingsModal({ opened, onClose }) {
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinError, setPinError] = useState('');
   const [visible, setVisible] = useState(config.visible_sections || ALL_SECTIONS.map(s => s.id));
+  const [watchlist, setWatchlist] = useState(config.stock_watchlist ? config.stock_watchlist.join(', ') : '');
   const [transitLines, setTransitLines] = useState(config.transit_lines || []);
   const [editingLine, setEditingLine] = useState(null); // null | 'new' | line object
   const [saving, setSaving] = useState(false);
@@ -143,6 +144,7 @@ export default function SettingsModal({ opened, onClose }) {
           <Tabs.Tab value="transit">Transit</Tabs.Tab>
           <Tabs.Tab value="security">PIN</Tabs.Tab>
           <Tabs.Tab value="sections">Sections</Tabs.Tab>
+          <Tabs.Tab value="stocks">Stocks</Tabs.Tab>
           <Tabs.Tab value="account">Account</Tabs.Tab>
         </Tabs.List>
 
@@ -257,6 +259,32 @@ export default function SettingsModal({ opened, onClose }) {
               />
             ))}
             <Button size="sm" mt="sm" onClick={saveSections} loading={saving}>{saved === 'sections' ? 'Saved!' : 'Save'}</Button>
+          </Stack>
+        </Tabs.Panel>
+        <Tabs.Panel value="stocks">
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">
+              Enter stock symbols to track, comma-separated. Leave empty to show the full top 100 by market cap.
+            </Text>
+            <Textarea
+              label="Watchlist"
+              placeholder="AAPL, TSLA, NVDA, MSFT, GOOGL..."
+              value={watchlist}
+              onChange={e => setWatchlist(e.currentTarget.value)}
+              minRows={3}
+              autosize
+            />
+            <Text size="xs" c="dimmed">
+              {watchlist.split(',').map(s => s.trim()).filter(Boolean).length > 0
+                ? `${watchlist.split(',').map(s => s.trim()).filter(Boolean).length} symbols`
+                : 'Showing all top 100'}
+            </Text>
+            <Button size="sm" onClick={() => {
+              const symbols = watchlist.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+              save({ stock_watchlist: symbols.length > 0 ? symbols : null }, 'watchlist');
+            }} loading={saving}>
+              {saved === 'watchlist' ? 'Saved!' : 'Save'}
+            </Button>
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="account">

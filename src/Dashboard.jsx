@@ -841,7 +841,7 @@ export default function Dashboard() {
             case 'stocks': return (
               <Box key="stocks">
                 <SectionHeader badge="Stocks" badgeColor="green" title="Top 100 Stocks" dragHandle={dh}
-                  right={<Group gap="xs"><SegmentedControl size="xs" value={stockRange} onChange={setStockRange} data={['1D','1W','1M','1Y']} /><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil(stocks.length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
+                  right={<Group gap="xs"><SegmentedControl size="xs" value={stockRange} onChange={setStockRange} data={['1D','1W','1M','1Y']} /><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil((config.stock_watchlist?.length > 0 ? stocks.filter(s => config.stock_watchlist.includes(s.symbol)) : stocks).length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
                 <SectionCard>
                   {(() => {
@@ -851,7 +851,10 @@ export default function Dashboard() {
                     });
                     const arrow = (col) => stockSort.col === col ? (stockSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
                     const toggle = (col) => setStockSort(s => ({ col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' }));
-                    const sorted = [...stocks].sort((a, b) => {
+                    const displayStocks = config.stock_watchlist?.length > 0
+                      ? stocks.filter(s => config.stock_watchlist.includes(s.symbol))
+                      : stocks;
+                    const sorted = [...displayStocks].sort((a, b) => {
                       const d = stockSort.dir === 'asc' ? 1 : -1;
                       if (stockSort.col === 'rank') return (a.rank - b.rank) * d;
                       if (stockSort.col === 'symbol') return a.symbol.localeCompare(b.symbol) * d;

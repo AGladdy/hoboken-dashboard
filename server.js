@@ -75,6 +75,18 @@ async function initDb() {
   `);
   // Additive migrations — safe to run repeatedly
   await pool.query(`ALTER TABLE user_config ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)`);
+  // Migration: convert user_config to per-user rows
+  await pool.query(`
+    DO $$
+    BEGIN
+      BEGIN
+        ALTER TABLE user_config DROP CONSTRAINT user_config_pkey;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END;
+    END $$
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS user_config_user_key ON user_config (key, user_id) WHERE user_id IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS user_config_global_key ON user_config (key) WHERE user_id IS NULL`);
   await pool.query(`ALTER TABLE strava_activities ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)`);
   // Seed defaults (won't overwrite existing)
   const defaults = [
@@ -83,9 +95,10 @@ async function initDb() {
     ['pin_hash', '""'],
     ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"The White House, 1600 Pennsylvania Ave NW, Washington, DC"}'],
     ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+    ['stock_watchlist', 'null'],
   ];
   for (const [key, val] of defaults) {
-    await pool.query("INSERT INTO user_config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO NOTHING", [key, val]);
+    await pool.query("INSERT INTO user_config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT DO NOTHING", [key, val]);
   }
 
   // Warm caches from DB on startup
@@ -138,7 +151,7 @@ initDb()
   .catch(e => console.error("DB init failed:", e.message));
 
 // ========== USER CONFIG ==========
-let cachedConfig = null;
+const cachedConfigMap = {};
 
 const DEFAULT_CONFIG = {
   display_name: "User",
@@ -148,26 +161,44 @@ const DEFAULT_CONFIG = {
   visible_sections: ["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"],
 };
 
-async function getConfig() {
-  if (cachedConfig) return cachedConfig;
+async function getConfigForUser(userId) {
+  const cacheKey = userId || '__global__';
+  if (cachedConfigMap[cacheKey]) return cachedConfigMap[cacheKey];
   if (!pool) return { ...DEFAULT_CONFIG };
   try {
-    const { rows } = await pool.query("SELECT key, value FROM user_config");
-    cachedConfig = { ...DEFAULT_CONFIG, ...Object.fromEntries(rows.map(r => [r.key, r.value])) };
-    return cachedConfig;
+    let rows;
+    if (userId) {
+      const result = await pool.query("SELECT key, value FROM user_config WHERE user_id = $1", [userId]);
+      rows = result.rows;
+      if (rows.length === 0) {
+        const fallback = await pool.query("SELECT key, value FROM user_config WHERE user_id IS NULL");
+        rows = fallback.rows;
+      }
+    } else {
+      const result = await pool.query("SELECT key, value FROM user_config WHERE user_id IS NULL");
+      rows = result.rows;
+    }
+    const cfg = { ...DEFAULT_CONFIG, ...Object.fromEntries(rows.map(r => [r.key, r.value])) };
+    cachedConfigMap[cacheKey] = cfg;
+    return cfg;
   } catch {
     return { ...DEFAULT_CONFIG };
   }
 }
 
-app.get("/api/config", async (req, res) => {
-  const cfg = await getConfig();
+async function getConfig() {
+  return getConfigForUser(null);
+}
+
+app.get("/api/config", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
   const { pin_hash, ...safe } = cfg;
   safe.pin_hash_set = Boolean(pin_hash);
   res.json(safe);
 });
 
-app.post("/api/config", async (req, res) => {
+app.post("/api/config", requireAuth, async (req, res) => {
+  const userId = req.user.userId;
   const patch = req.body || {};
   const updates = { ...patch };
   if (updates.pin !== undefined) {
@@ -178,22 +209,25 @@ app.post("/api/config", async (req, res) => {
     try {
       for (const [key, value] of Object.entries(updates)) {
         await pool.query(
-          "INSERT INTO user_config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value=$2::jsonb, updated_at=NOW()",
-          [key, JSON.stringify(value)]
+          `INSERT INTO user_config (key, value, user_id) VALUES ($1, $2::jsonb, $3)
+           ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL
+           DO UPDATE SET value=$2::jsonb, updated_at=NOW()`,
+          [key, JSON.stringify(value), userId]
         );
       }
     } catch (e) { console.error("Config write failed:", e.message); }
   }
-  cachedConfig = null; // invalidate
-  const cfg = await getConfig();
+  delete cachedConfigMap[userId];
+  const cfg = await getConfigForUser(userId);
   const { pin_hash, ...safe } = cfg;
+  safe.pin_hash_set = Boolean(pin_hash);
   res.json(safe);
 });
 
-app.post("/api/config/verify-pin", async (req, res) => {
+app.post("/api/config/verify-pin", requireAuth, async (req, res) => {
   const { pin } = req.body || {};
   if (!pin) return res.json({ valid: false });
-  const cfg = await getConfig();
+  const cfg = await getConfigForUser(req.user.userId);
   if (!cfg.pin_hash) return res.json({ valid: true }); // no PIN set
   const valid = await bcrypt.compare(String(pin), cfg.pin_hash);
   res.json({ valid });
@@ -225,6 +259,22 @@ app.post("/api/auth/signup", async (req, res) => {
       [email.toLowerCase().trim(), hash]
     );
     const user = result.rows[0];
+    // Seed default config for new user
+    const configDefaults = [
+      ['display_name', '"User"'],
+      ['app_title', '"My Dashboard"'],
+      ['pin_hash', '""'],
+      ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"The White House, 1600 Pennsylvania Ave NW, Washington, DC"}'],
+      ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+      ['stock_watchlist', 'null'],
+    ];
+    for (const [key, val] of configDefaults) {
+      await pool.query(
+        `INSERT INTO user_config (key, value, user_id) VALUES ($1, $2::jsonb, $3)
+         ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO NOTHING`,
+        [key, val, user.id]
+      );
+    }
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
     res.json({ token, user: { id: user.id, email: user.email } });
   } catch (e) {

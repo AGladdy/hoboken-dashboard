@@ -106,15 +106,36 @@ async function initDb() {
   } catch {}
   try {
     for (const rangeKey of ['1d','5d','1mo','1y']) {
-      const stockr = await pool.query("SELECT * FROM stocks WHERE range_key = $1 ORDER BY rank ASC", [rangeKey]);
+      const stockr = await pool.query("SELECT *, MAX(fetched_at) OVER (PARTITION BY range_key) as latest_fetch FROM stocks WHERE range_key = $1 ORDER BY rank ASC", [rangeKey]);
       if (stockr.rows.length > 0) {
         cachedStocksMap[rangeKey] = stockr.rows.map(r => ({ rank: r.rank, symbol: r.symbol, price: r.price, change: r.change_val, pct: r.pct, sparkline: r.sparkline }));
-        lastStockFetchMap[rangeKey] = Date.now();
+        lastStockFetchMap[rangeKey] = new Date(stockr.rows[0].latest_fetch).getTime();
       }
     }
   } catch {}
 }
-initDb().catch(e => console.error("DB init failed:", e.message));
+initDb()
+  .then(() => {
+    // After DB is ready and cache is warmed, start background refresh jobs
+    // Fetch all 4 stock ranges every 15 minutes
+    setInterval(async () => {
+      for (const rangeKey of ['1d', '5d', '1mo', '1y']) {
+        await fetchAndCacheStocks(rangeKey);
+        await new Promise(r => setTimeout(r, 2000)); // stagger to avoid rate limits
+      }
+    }, 900000); // 15 min
+
+    // Pre-warm on startup for any ranges not already in cache
+    setTimeout(async () => {
+      for (const rangeKey of ['1d', '5d', '1mo', '1y']) {
+        if (!cachedStocksMap[rangeKey]) {
+          await fetchAndCacheStocks(rangeKey);
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    }, 5000); // 5s after startup
+  })
+  .catch(e => console.error("DB init failed:", e.message));
 
 // ========== USER CONFIG ==========
 let cachedConfig = null;
@@ -318,7 +339,7 @@ async function fetchBatch(symbols, interval, range) {
 async function fetchAndCacheStocks(rangeKey = '1mo') {
   const cfg = STOCK_RANGE_CONFIG[rangeKey] || STOCK_RANGE_CONFIG['1mo'];
   const now = Date.now();
-  if (cachedStocksMap[rangeKey] && now - (lastStockFetchMap[rangeKey] || 0) < 300000) return;
+  if (cachedStocksMap[rangeKey] && now - (lastStockFetchMap[rangeKey] || 0) < 900000) return;
   try {
     const all = [];
     const batchSize = 10;

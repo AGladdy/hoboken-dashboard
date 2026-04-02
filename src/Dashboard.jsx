@@ -505,15 +505,15 @@ export default function Dashboard() {
 
       {/* HEADER */}
       <Group justify="space-between" mb="md" wrap="nowrap" gap="xs">
-        <Text fw={700} size="lg" style={{ flexShrink: 0 }}>
+        <Text fw={700} size="lg" truncate style={{ minWidth: 0 }}>
           {(() => { const h = now.getHours(); const n = config.display_name || "there"; return h < 12 ? `Good morning, ${n}` : h < 17 ? `Good afternoon, ${n}` : `Good evening, ${n}`; })()}
         </Text>
-        <Group gap="xs" wrap="nowrap" justify="flex-end">
+        <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ flexShrink: 0 }}>
           <Text size="sm" c="dimmed" ff="monospace" visibleFrom="sm">
             {now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
           </Text>
           <Button
-            size="xs" variant="default"
+            size="xs" variant="default" visibleFrom="sm"
             onClick={() => {
               localStorage.removeItem('gl_left_order');
               localStorage.removeItem('gl_right_order');

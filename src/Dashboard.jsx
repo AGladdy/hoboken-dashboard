@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PinInput } from "@mantine/core";
 import { DndContext, closestCenter } from "@dnd-kit/core";
-import { useConfig, API_BASE } from "./ConfigContext";
-import { useAuth } from "./AuthContext";
+import { useConfig, API_BASE, fetchWithAuth } from "./ConfigContext";
 import SettingsModal from "./SettingsModal";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -230,7 +229,6 @@ export default function Dashboard() {
   const colorScheme = useComputedColorScheme("dark");
   const dark = colorScheme === "dark";
   const { config } = useConfig();
-  const { token } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [now, setNow] = useState(new Date());
@@ -391,14 +389,12 @@ export default function Dashboard() {
   const fetchWeatherNarrative = useCallback(async () => {
     const { lat, lon } = coordsRef.current;
     try {
-      const res = await fetch(`${CONFIG.WEATHER_NARRATIVE_API}?lat=${lat}&lon=${lon}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetchWithAuth(`${CONFIG.WEATHER_NARRATIVE_API}?lat=${lat}&lon=${lon}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.text) setWeatherNarrative(data.text);
     } catch (e) { console.error("Weather narrative fetch failed:", e); }
-  }, [token]);
+  }, []);
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -621,12 +617,9 @@ export default function Dashboard() {
             setAskCount(newCount);
             setAskQuery("");
             try {
-              const res = await fetch(CONFIG.ASK_API, {
+              const res = await fetchWithAuth(CONFIG.ASK_API, {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ query: currentQuery, history: askHistory }),
               });
               const data = await res.json();

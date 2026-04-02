@@ -15,9 +15,20 @@ function getToken() {
   return localStorage.getItem('auth_token');
 }
 
-function authHeaders() {
+export function fetchWithAuth(url, options = {}) {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const headers = {
+    ...options.headers,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  return fetch(url, { ...options, headers }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.reload();
+      return Promise.reject(new Error('Session expired'));
+    }
+    return res;
+  });
 }
 
 export function ConfigProvider({ children }) {
@@ -25,7 +36,7 @@ export function ConfigProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/api/config`, { headers: authHeaders() })
+    fetchWithAuth(`${BASE}/api/config`)
       .then(r => r.json())
       .then(data => setConfig(prev => ({ ...prev, ...data })))
       .catch(() => {})
@@ -33,9 +44,9 @@ export function ConfigProvider({ children }) {
   }, []);
 
   const saveConfig = useCallback(async (patch) => {
-    const res = await fetch(`${BASE}/api/config`, {
+    const res = await fetchWithAuth(`${BASE}/api/config`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
     const updated = await res.json();

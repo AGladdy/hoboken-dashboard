@@ -667,27 +667,39 @@ export default function Dashboard() {
           </form>
         )}
         {(askHistory.length > 0 || askLoading) && (
-          <Box mt="xs" style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-            {askHistory.map((h, i) => (
-              <Box key={i} style={{ textAlign: h.role === "user" ? "right" : "left" }}>
-                <Text
-                  size="sm"
-                  lh={1.6}
-                  style={{
-                    display: "inline-block",
-                    background: h.role === "user" ? "var(--mantine-color-violet-light)" : "var(--mantine-color-default-hover)",
-                    borderRadius: 8,
-                    padding: "6px 10px",
-                    maxWidth: "90%",
-                    textAlign: "left",
-                  }}
-                >
-                  {h.content}
-                </Text>
-              </Box>
-            ))}
+          <Box mt="xs" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {askHistory.map((h, i) => {
+              const isUser = h.role === "user";
+              return (
+                <Box key={i} style={{ display: "flex", justifyContent: isUser ? "flex-start" : "flex-end" }}>
+                  <Box
+                    style={{
+                      maxWidth: "82%",
+                      background: isUser
+                        ? "var(--mantine-color-default-hover)"
+                        : "var(--mantine-color-violet-light)",
+                      borderRadius: isUser ? "4px 12px 12px 12px" : "12px 4px 12px 12px",
+                      padding: "8px 12px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <Text size="xs" fw={600} c={isUser ? "dimmed" : "violet"} mb={2}>
+                      {isUser ? "You" : "✦ Gladdy"}
+                    </Text>
+                    <Text size="sm" lh={1.6} style={{ whiteSpace: "pre-wrap" }}>
+                      {h.content}
+                    </Text>
+                  </Box>
+                </Box>
+              );
+            })}
             {askLoading && (
-              <Text size="sm" c="dimmed" fs="italic" style={{ padding: "4px 2px" }}>Thinking{askDots}</Text>
+              <Box style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Box style={{ background: "var(--mantine-color-violet-light)", borderRadius: "12px 4px 12px 12px", padding: "8px 12px" }}>
+                  <Text size="xs" fw={600} c="violet" mb={2}>✦ Gladdy</Text>
+                  <Text size="sm" c="dimmed" fs="italic">Thinking{askDots}</Text>
+                </Box>
+              </Box>
             )}
           </Box>
         )}

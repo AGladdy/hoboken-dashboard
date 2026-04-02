@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { XMLParser } from "fast-xml-parser";
 import pkg from "pg";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 const { Pool } = pkg;
 
 const app = express();
@@ -64,6 +65,17 @@ async function initDb() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // Additive migrations — safe to run repeatedly
+  await pool.query(`ALTER TABLE user_config ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)`);
+  await pool.query(`ALTER TABLE strava_activities ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)`);
   // Seed defaults (won't overwrite existing)
   const defaults = [
     ['display_name', '"User"'],
@@ -164,6 +176,63 @@ app.post("/api/config/verify-pin", async (req, res) => {
   if (!cfg.pin_hash) return res.json({ valid: true }); // no PIN set
   const valid = await bcrypt.compare(String(pin), cfg.pin_hash);
   res.json({ valid });
+});
+
+// ========== AUTH ==========
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-prod";
+
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "unauthorized" });
+  try {
+    req.user = jwt.verify(auth.slice(7), JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: "invalid token" });
+  }
+}
+
+app.post("/api/auth/signup", async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: "email and password required" });
+  if (password.length < 8) return res.status(400).json({ error: "password must be at least 8 characters" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
+      [email.toLowerCase().trim(), hash]
+    );
+    const user = result.rows[0];
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ token, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    if (e.code === "23505") return res.status(409).json({ error: "email already registered" });
+    console.error("Signup failed:", e.message);
+    res.status(500).json({ error: "signup failed" });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: "email and password required" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  try {
+    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase().trim()]);
+    if (result.rows.length === 0) return res.status(401).json({ error: "invalid credentials" });
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: "invalid credentials" });
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ token, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error("Login failed:", e.message);
+    res.status(500).json({ error: "login failed" });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, (req, res) => {
+  res.json({ userId: req.user.userId, email: req.user.email });
 });
 
 

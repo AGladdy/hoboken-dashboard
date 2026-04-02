@@ -11,12 +11,21 @@ export const DEFAULT_CONFIG = {
 
 const ConfigContext = createContext({ config: DEFAULT_CONFIG, loading: true, saveConfig: async () => {} });
 
+function getToken() {
+  return localStorage.getItem('auth_token');
+}
+
+function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function ConfigProvider({ children }) {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${BASE}/api/config`)
+    fetch(`${BASE}/api/config`, { headers: authHeaders() })
       .then(r => r.json())
       .then(data => setConfig(prev => ({ ...prev, ...data })))
       .catch(() => {})
@@ -26,7 +35,7 @@ export function ConfigProvider({ children }) {
   const saveConfig = useCallback(async (patch) => {
     const res = await fetch(`${BASE}/api/config`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(patch),
     });
     const updated = await res.json();

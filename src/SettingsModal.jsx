@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Collapse } from '@mantine/core';
+import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge } from '@mantine/core';
 import { useConfig } from './ConfigContext';
+import { useAuth } from './AuthContext';
 
 const EMPTY_LINE = {
   id: null, name: '', type: 'bus', from: '', to: '', tripTime: 20,
@@ -74,6 +75,7 @@ const ALL_SECTIONS = [
 
 export default function SettingsModal({ opened, onClose }) {
   const { config, saveConfig } = useConfig();
+  const { user, logout } = useAuth();
 
   const [displayName, setDisplayName] = useState(config.display_name || '');
   const [appTitle, setAppTitle] = useState(config.app_title || '');
@@ -141,6 +143,7 @@ export default function SettingsModal({ opened, onClose }) {
           <Tabs.Tab value="transit">Transit</Tabs.Tab>
           <Tabs.Tab value="security">PIN</Tabs.Tab>
           <Tabs.Tab value="sections">Sections</Tabs.Tab>
+          <Tabs.Tab value="account">Account</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="profile">
@@ -256,6 +259,17 @@ export default function SettingsModal({ opened, onClose }) {
             <Button size="sm" mt="sm" onClick={saveSections} loading={saving}>{saved === 'sections' ? 'Saved!' : 'Save'}</Button>
           </Stack>
         </Tabs.Panel>
+        <Tabs.Panel value="account">
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">Signed in as</Text>
+            <Text size="sm" fw={500}>{user?.email || '—'}</Text>
+            <Divider />
+            <Button size="sm" variant="default" color="red" onClick={() => { onClose(); logout(); }}>
+              Sign out
+            </Button>
+          </Stack>
+        </Tabs.Panel>
+
       </Tabs>
     </Modal>
   );

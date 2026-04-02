@@ -5,7 +5,10 @@ import { XMLParser } from "fast-xml-parser";
 import pkg from "pg";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { Resend } from "resend";
 const { Pool } = pkg;
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const app = express();
 app.use(cors());
@@ -70,6 +73,14 @@ async function initDb() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token TEXT PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -314,6 +325,56 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ userId: req.user.userId, email: req.user.email });
 });
 
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: "email required" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  res.json({ ok: true }); // Always respond OK to prevent email enumeration
+  try {
+    const result = await pool.query("SELECT id FROM users WHERE email = $1", [email.toLowerCase().trim()]);
+    if (result.rows.length === 0) return;
+    const userId = result.rows[0].id;
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2,'0')).join('');
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+    await pool.query("DELETE FROM password_resets WHERE user_id = $1", [userId]);
+    await pool.query("INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)", [token, userId, expires]);
+    if (resend) {
+      const resetUrl = `${process.env.FRONTEND_URL || 'https://www.gladdy.life'}?reset_token=${token}`;
+      await resend.emails.send({
+        from: process.env.EMAIL_FROM || 'noreply@gladdy.life',
+        to: email.toLowerCase().trim(),
+        subject: 'Reset your password',
+        html: `<p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request this, you can ignore this email.</p>`,
+      });
+    } else {
+      console.log(`[password-reset] token for ${email}: ${token}`);
+    }
+  } catch (e) {
+    console.error("Forgot password failed:", e.message);
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) return res.status(400).json({ error: "token and password required" });
+  if (password.length < 8) return res.status(400).json({ error: "password must be at least 8 characters" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  try {
+    const result = await pool.query(
+      "SELECT user_id FROM password_resets WHERE token = $1 AND expires_at > NOW()",
+      [token]
+    );
+    if (result.rows.length === 0) return res.status(400).json({ error: "invalid or expired reset link" });
+    const userId = result.rows[0].user_id;
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, userId]);
+    await pool.query("DELETE FROM password_resets WHERE user_id = $1", [userId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Reset password failed:", e.message);
+    res.status(500).json({ error: "reset failed" });
+  }
+});
 
 const PANYNJ_API = "https://www.panynj.gov/bin/portauthority/ridepath.json";
 
@@ -1396,7 +1457,7 @@ app.get("/api/strava/connect", (req, res) => {
 
 app.get("/api/strava/callback", async (req, res) => {
   const { code, state: userId } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || 'https://main.d2s6v9m1z5h8k3.amplifyapp.com';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://www.gladdy.life';
   if (!code || !userId) return res.redirect(`${frontendUrl}?strava_error=invalid`);
   try {
     const r = await fetch("https://www.strava.com/oauth/token", {

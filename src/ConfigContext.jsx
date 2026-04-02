@@ -22,7 +22,7 @@ export function fetchWithAuth(url, options = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
   return fetch(url, { ...options, headers }).then(res => {
-    if (res.status === 401) {
+    if (res.status === 401 && token) {
       localStorage.removeItem('auth_token');
       window.location.reload();
       return Promise.reject(new Error('Session expired'));
@@ -36,6 +36,7 @@ export function ConfigProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!getToken()) { setLoading(false); return; }
     fetchWithAuth(`${BASE}/api/config`)
       .then(r => r.json())
       .then(data => setConfig(prev => ({ ...prev, ...data })))

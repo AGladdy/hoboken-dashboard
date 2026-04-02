@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Box, Stack, Text, TextInput, NumberInput, Button, Group,
-  PinInput, Stepper, Paper, Title, ThemeIcon
+  Box, Stack, Text, TextInput, Button, Group,
+  PinInput, Stepper, Paper, Title, ThemeIcon, Combobox, useCombobox, Loader
 } from '@mantine/core';
 import { useConfig, API_BASE } from './ConfigContext';
+
+async function geocodeCity(query) {
+  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`);
+  const data = await r.json();
+  return (data.results || []).map(r => ({
+    label: [r.name, r.admin1, r.country].filter(Boolean).join(', '),
+    lat: r.latitude,
+    lon: r.longitude,
+  }));
+}
 
 export default function Onboarding({ onComplete }) {
   const { saveConfig } = useConfig();
@@ -15,70 +25,65 @@ export default function Onboarding({ onComplete }) {
   const [appTitle, setAppTitle] = useState('');
 
   // Step 1 — Location
-  const [city, setCity] = useState('');
-  const [lat, setLat] = useState('');
-  const [lon, setLon] = useState('');
+  const [cityInput, setCityInput] = useState('');
+  const [selectedCity, setSelectedCity] = useState(null); // { label, lat, lon }
   const [address, setAddress] = useState('');
-  const [locating, setLocating] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef(null);
+  const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
 
   // Step 2 — PIN
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinError, setPinError] = useState('');
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLat(pos.coords.latitude.toFixed(4));
-        setLon(pos.coords.longitude.toFixed(4));
-        setLocating(false);
-      },
-      () => setLocating(false)
-    );
-  };
+  useEffect(() => {
+    if (cityInput.length < 2) { setSuggestions([]); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await geocodeCity(cityInput);
+        setSuggestions(results);
+        if (results.length > 0) combobox.openDropdown();
+      } catch {}
+      finally { setSearching(false); }
+    }, 350);
+  }, [cityInput]);
 
   const next = async () => {
     if (step === 0) {
       if (!displayName.trim()) return;
       setStep(1);
     } else if (step === 1) {
-      if (!city.trim() || !lat || !lon) return;
+      if (!selectedCity) return;
       setStep(2);
     } else if (step === 2) {
-      if (pin && pin !== pinConfirm) {
-        setPinError('PINs do not match');
-        return;
-      }
+      if (pin && pin !== pinConfirm) { setPinError('PINs do not match'); return; }
       setSaving(true);
       try {
         const patch = {
           display_name: displayName.trim(),
           app_title: appTitle.trim() || `${displayName.trim()}'s Dashboard`,
-          location: { city: city.trim(), lat: Number(lat), lon: Number(lon), address: address.trim() || city.trim() },
+          location: {
+            city: selectedCity.label,
+            lat: selectedCity.lat,
+            lon: selectedCity.lon,
+            address: address.trim() || selectedCity.label,
+          },
         };
         if (pin) patch.pin = pin;
         await saveConfig(patch);
         onComplete();
-      } finally {
-        setSaving(false);
-      }
+      } finally { setSaving(false); }
     }
   };
 
   const back = () => setStep(s => s - 1);
 
   return (
-    <Box
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
+    <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <Paper withBorder p="xl" radius="lg" style={{ width: '100%', maxWidth: 480 }}>
         <Stack gap="xl">
           <Stack gap={4} align="center">
@@ -117,45 +122,41 @@ export default function Onboarding({ onComplete }) {
 
           {step === 1 && (
             <Stack gap="sm">
-              <TextInput
-                label="City"
-                placeholder="Hoboken, NJ"
-                value={city}
-                onChange={e => setCity(e.currentTarget.value)}
-                required
-                autoFocus
-              />
+              <Combobox
+                store={combobox}
+                onOptionSubmit={val => {
+                  const found = suggestions.find(s => s.label === val);
+                  if (found) { setSelectedCity(found); setCityInput(found.label); }
+                  combobox.closeDropdown();
+                }}
+              >
+                <Combobox.Target>
+                  <TextInput
+                    label="City"
+                    placeholder="Search for your city…"
+                    value={cityInput}
+                    onChange={e => { setCityInput(e.currentTarget.value); setSelectedCity(null); combobox.openDropdown(); }}
+                    onFocus={() => suggestions.length > 0 && combobox.openDropdown()}
+                    rightSection={searching ? <Loader size="xs" /> : null}
+                    required
+                    autoFocus
+                    description={selectedCity ? `${selectedCity.lat.toFixed(4)}, ${selectedCity.lon.toFixed(4)}` : 'Coordinates will fill automatically'}
+                  />
+                </Combobox.Target>
+                <Combobox.Dropdown>
+                  <Combobox.Options>
+                    {suggestions.map(s => (
+                      <Combobox.Option key={s.label} value={s.label}>{s.label}</Combobox.Option>
+                    ))}
+                  </Combobox.Options>
+                </Combobox.Dropdown>
+              </Combobox>
               <TextInput
                 label="Street address"
-                placeholder="The White House, 1600 Pennsylvania Ave NW"
+                placeholder="123 Main St (optional — used in AI search for local context)"
                 value={address}
                 onChange={e => setAddress(e.currentTarget.value)}
-                description="Used in AI search prompts for better local context"
               />
-              <Group grow>
-                <NumberInput
-                  label="Latitude"
-                  placeholder="40.7440"
-                  value={lat}
-                  onChange={setLat}
-                  decimalScale={6}
-                />
-                <NumberInput
-                  label="Longitude"
-                  placeholder="-74.0324"
-                  value={lon}
-                  onChange={setLon}
-                  decimalScale={6}
-                />
-              </Group>
-              <Button
-                size="xs"
-                variant="default"
-                onClick={useMyLocation}
-                loading={locating}
-              >
-                📍 Use my current location
-              </Button>
             </Stack>
           )}
 
@@ -163,7 +164,6 @@ export default function Onboarding({ onComplete }) {
             <Stack gap="sm">
               <Text size="sm" c="dimmed">
                 Optionally set a 4-digit PIN to prevent others from changing your settings.
-                The dashboard itself is always publicly viewable.
               </Text>
               <Text size="xs" fw={500}>PIN <Text span c="dimmed">(optional)</Text></Text>
               <PinInput length={4} type="number" mask value={pin} onChange={setPin} />
@@ -189,7 +189,7 @@ export default function Onboarding({ onComplete }) {
               loading={saving}
               disabled={
                 (step === 0 && !displayName.trim()) ||
-                (step === 1 && (!city.trim() || !lat || !lon))
+                (step === 1 && !selectedCity)
               }
             >
               {step === 2 ? (pin ? 'Finish' : 'Skip & Finish') : 'Continue'}

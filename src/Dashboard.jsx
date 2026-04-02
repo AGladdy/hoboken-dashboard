@@ -896,7 +896,7 @@ export default function Dashboard() {
             );
             case 'stocks': return (
               <Box key="stocks">
-                <SectionHeader badge="Stocks" badgeColor="green" title="Top 100 Stocks" dragHandle={dh}
+                <SectionHeader badge="Stocks" badgeColor="green" title="US Market" dragHandle={dh}
                   right={<Group gap="xs"><SegmentedControl size="xs" value={stockRange} onChange={setStockRange} data={['1D','1W','1M','1Y']} /><ActionIcon size="sm" variant="default" disabled={stockPage === 0} onClick={() => setStockPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={stockPage >= Math.ceil((config.stock_watchlist?.length > 0 ? stocks.filter(s => config.stock_watchlist.includes(s.symbol)) : stocks).length / 10) - 1} onClick={() => setStockPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
                 <SectionCard>

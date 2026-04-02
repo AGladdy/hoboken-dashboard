@@ -2,10 +2,37 @@ import express from "express";
 import cors from "cors";
 import Anthropic from "@anthropic-ai/sdk";
 import { XMLParser } from "fast-xml-parser";
+import pkg from "pg";
+const { Pool } = pkg;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ========== POSTGRES ==========
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS strava_activities (
+      id BIGINT PRIMARY KEY,
+      name TEXT,
+      type TEXT,
+      emoji TEXT,
+      date TEXT,
+      distance TEXT,
+      duration TEXT,
+      pace TEXT,
+      elevation INT,
+      heartrate INT,
+      calories INT,
+      moving_time INT,
+      start_date TIMESTAMPTZ,
+      fetched_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+initDb().catch(e => console.error("DB init failed:", e.message));
 
 const PANYNJ_API = "https://www.panynj.gov/bin/portauthority/ridepath.json";
 
@@ -930,88 +957,117 @@ async function getStravaAccessToken() {
   return stravaAccessToken;
 }
 
+const fmt = (meters) => (meters / 1609.34).toFixed(2);
+const fmtPace = (metersPerSec) => {
+  const secsPerMile = 1609.34 / metersPerSec;
+  const m = Math.floor(secsPerMile / 60);
+  const s = Math.round(secsPerMile % 60).toString().padStart(2, "0");
+  return `${m}:${s}/mi`;
+};
+const fmtDuration = (secs) => {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+const typeEmoji = { Run: "🏃", Ride: "🚴", Swim: "🏊", Walk: "🚶", Hike: "🥾", Workout: "💪" };
+
+function buildStravaResponse(rows) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+  const weeklyCount = rows.filter(a => new Date(a.date + "T00:00:00") >= sevenDaysAgo).length;
+  const chartDays = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const label = d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+    const dayActivities = rows.filter(a => a.date === dateStr);
+    const mins = dayActivities.reduce((sum, a) => {
+      const parts = a.duration?.match(/(\d+)h\s*(\d+)m|(\d+)m/);
+      if (!parts) return sum;
+      return sum + (parts[1] ? parseInt(parts[1]) * 60 + parseInt(parts[2]) : parseInt(parts[3]));
+    }, 0);
+    const cal = dayActivities.reduce((sum, a) => sum + (a.calories || 0), 0);
+    chartDays.push({ day: label, mins: mins || null, cal: cal || null });
+  }
+  return { activities: rows, weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
+}
+
 app.get("/api/strava", async (req, res) => {
   const now = Date.now();
-  if (cachedStrava && now - lastStravaFetch < 300000) return res.json(cachedStrava);
+  if (cachedStrava && now - lastStravaFetch < 3600000) return res.json(cachedStrava);
 
   try {
+    // Find the most recent activity we have stored
+    const latestRow = await pool.query("SELECT start_date FROM strava_activities ORDER BY start_date DESC LIMIT 1");
+    const afterTs = latestRow.rows[0]?.start_date
+      ? Math.floor(new Date(latestRow.rows[0].start_date).getTime() / 1000)
+      : 0;
+
     const token = await getStravaAccessToken();
-    const r = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=50`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const activities = await r.json();
 
-    const fmt = (meters) => (meters / 1609.34).toFixed(2);
-    const fmtPace = (metersPerSec) => {
-      const secsPerMile = 1609.34 / metersPerSec;
-      const m = Math.floor(secsPerMile / 60);
-      const s = Math.round(secsPerMile % 60).toString().padStart(2, "0");
-      return `${m}:${s}/mi`;
-    };
-    const fmtDuration = (secs) => {
-      const h = Math.floor(secs / 3600);
-      const m = Math.floor((secs % 3600) / 60);
-      return h > 0 ? `${h}h ${m}m` : `${m}m`;
-    };
+    // Only fetch activities newer than what we have (or all if DB is empty)
+    const url = afterTs > 0
+      ? `https://www.strava.com/api/v3/athlete/activities?per_page=50&after=${afterTs}`
+      : `https://www.strava.com/api/v3/athlete/activities?per_page=50`;
 
-    const typeEmoji = { Run: "🏃", Ride: "🚴", Swim: "🏊", Walk: "🚶", Hike: "🥾", Workout: "💪" };
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const newActivities = await r.json().catch(() => []);
+    const fetched = Array.isArray(newActivities) ? newActivities : [];
 
-    const allActivities = Array.isArray(activities) ? activities : [];
-    const top20 = allActivities.slice(0, 20);
+    if (fetched.length > 0) {
+      // Fetch details for calories
+      const details = await Promise.all(fetched.map(a =>
+        fetch(`https://www.strava.com/api/v3/activities/${a.id}`, { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json()).catch(() => ({}))
+      ));
 
-    // Fetch details for first 20 only to get calories without hitting rate limits
-    const details = await Promise.all(top20.map(a =>
-      fetch(`https://www.strava.com/api/v3/activities/${a.id}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).catch(() => ({}))
-    ));
-
-    const result = allActivities.map((a, i) => {
-      const detail = details[i] || {};
-      return {
-        id: a.id,
-        name: a.name,
-        type: a.sport_type || a.type,
-        emoji: typeEmoji[a.sport_type || a.type] || "🏅",
-        date: a.start_date_local?.split("T")[0],
-        distance: a.distance > 0 ? fmt(a.distance) : null,
-        duration: fmtDuration(a.moving_time),
-        pace: a.average_speed > 0 && (a.type === "Run" || a.sport_type === "Run") ? fmtPace(a.average_speed) : null,
-        elevation: a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
-        heartrate: a.average_heartrate ? Math.round(a.average_heartrate) : null,
-        calories: detail.calories ? Math.round(detail.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
-      };
-    });
-
-    // Weekly summary (last 7 days rolling)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    const thisWeek = result.filter(a => new Date(a.date + "T00:00:00") >= sevenDaysAgo);
-    const weeklyCount = thisWeek.length;
-
-    // Bar chart: last 14 days, one bar per day with total minutes
-    const chartDays = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const label = d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
-      const dayActivities = result.filter(a => a.date === dateStr);
-      const mins = dayActivities.reduce((sum, a) => {
-        const parts = a.duration.match(/(\d+)h\s*(\d+)m|(\d+)m/);
-        if (!parts) return sum;
-        return sum + (parts[1] ? parseInt(parts[1]) * 60 + parseInt(parts[2]) : parseInt(parts[3]));
-      }, 0);
-      const cal = dayActivities.reduce((sum, a) => sum + (a.calories || 0), 0);
-      chartDays.push({ day: label, mins: mins || null, cal: cal || null });
+      // Upsert new activities into DB
+      for (let i = 0; i < fetched.length; i++) {
+        const a = fetched[i];
+        const detail = details[i] || {};
+        const type = a.sport_type || a.type;
+        await pool.query(`
+          INSERT INTO strava_activities (id, name, type, emoji, date, distance, duration, pace, elevation, heartrate, calories, moving_time, start_date)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          ON CONFLICT (id) DO UPDATE SET
+            calories = EXCLUDED.calories, name = EXCLUDED.name
+        `, [
+          a.id, a.name, type,
+          typeEmoji[type] || "🏅",
+          a.start_date_local?.split("T")[0],
+          a.distance > 0 ? fmt(a.distance) : null,
+          fmtDuration(a.moving_time),
+          a.average_speed > 0 && (type === "Run") ? fmtPace(a.average_speed) : null,
+          a.total_elevation_gain > 0 ? Math.round(a.total_elevation_gain * 3.281) : null,
+          a.average_heartrate ? Math.round(a.average_heartrate) : null,
+          detail.calories ? Math.round(detail.calories) : (a.kilojoules ? Math.round(a.kilojoules / 4.184) : null),
+          a.moving_time,
+          a.start_date,
+        ]);
+      }
     }
 
-    cachedStrava = { activities: result, weeklyCount, chartData: chartDays, fetchedAt: new Date().toISOString() };
+    // Read all 50 most recent from DB
+    const { rows } = await pool.query(
+      "SELECT * FROM strava_activities ORDER BY start_date DESC LIMIT 50"
+    );
+
+    cachedStrava = buildStravaResponse(rows);
     lastStravaFetch = now;
     res.json(cachedStrava);
   } catch (e) {
     console.error("Strava fetch failed:", e.message);
-    res.json(cachedStrava || { activities: [], weeklyMiles: "0", weeklyCount: 0 });
+    // Fall back to DB data even if Strava API fails
+    try {
+      const { rows } = await pool.query("SELECT * FROM strava_activities ORDER BY start_date DESC LIMIT 50");
+      if (rows.length > 0) {
+        cachedStrava = buildStravaResponse(rows);
+        return res.json(cachedStrava);
+      }
+    } catch {}
+    res.json(cachedStrava || { activities: [], weeklyCount: 0, chartData: [] });
   }
 });
 

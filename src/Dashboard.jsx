@@ -456,12 +456,17 @@ export default function Dashboard() {
     fetchStocks();
   }, [stockRange, fetchStocks]);
 
+  const [stravaError, setStravaError] = useState('');
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('strava_connected')) {
       window.history.replaceState({}, '', window.location.pathname);
       setStravaConnected(true);
       fetchStrava();
+    } else if (params.get('strava_error')) {
+      window.history.replaceState({}, '', window.location.pathname);
+      setStravaError(decodeURIComponent(params.get('strava_error')));
     }
   }, [fetchStrava]);
 
@@ -833,6 +838,7 @@ export default function Dashboard() {
                 />
                 {!stravaConnected ? (
                   <Stack align="center" gap="sm" py="md">
+                    {stravaError && <Text size="sm" c="red" ta="center">{stravaError}</Text>}
                     <Text size="sm" c="dimmed">Connect your Strava account to see your workouts here.</Text>
                     <Button size="xs" color="orange" component="a" href={`${API_BASE}/api/strava/connect?token=${localStorage.getItem('auth_token')}`}>
                       Connect Strava

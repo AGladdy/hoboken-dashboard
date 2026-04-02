@@ -1411,11 +1411,24 @@ app.get("/api/strava/callback", async (req, res) => {
     });
     const data = await r.json();
     if (!data.access_token) throw new Error(data.message || "Token exchange failed");
+    const athleteId = data.athlete?.id;
+
+    // Check if this Strava account is already connected to a different user
+    if (pool && athleteId) {
+      const existing = await pool.query(
+        `SELECT user_id FROM user_config WHERE key = 'strava_tokens' AND value->>'athlete_id' = $1 AND user_id IS NOT NULL AND user_id != $2`,
+        [String(athleteId), userId]
+      );
+      if (existing.rows.length > 0) {
+        return res.redirect(`${frontendUrl}?strava_error=${encodeURIComponent("This Strava account is already connected to another user.")}`);
+      }
+    }
+
     const tokens = {
       access_token: data.access_token,
       refresh_token: data.refresh_token,
       expires_at: data.expires_at,
-      athlete_id: data.athlete?.id,
+      athlete_id: athleteId,
       athlete_name: data.athlete?.firstname,
     };
     if (pool) {
@@ -1425,7 +1438,6 @@ app.get("/api/strava/callback", async (req, res) => {
         [JSON.stringify(tokens), userId]
       );
       delete cachedConfigMap[userId];
-      // Clear strava cache so next request fetches fresh data
       delete cachedStravaMap[userId];
       delete lastStravaFetchMap2[userId];
     }
@@ -1482,7 +1494,7 @@ app.get("/api/strava", optionalAuth, async (req, res) => {
         await pool.query(`
           INSERT INTO strava_activities (id, name, type, emoji, date, distance, duration, pace, elevation, heartrate, calories, moving_time, start_date, user_id)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-          ON CONFLICT (id) DO UPDATE SET calories = EXCLUDED.calories, name = EXCLUDED.name, user_id = COALESCE(strava_activities.user_id, EXCLUDED.user_id)
+          ON CONFLICT (id) DO UPDATE SET calories = EXCLUDED.calories, name = EXCLUDED.name, user_id = EXCLUDED.user_id
         `, [
           a.id, a.name, type, typeEmoji[type] || "🏅",
           a.start_date_local?.split("T")[0],

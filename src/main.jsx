@@ -28,8 +28,12 @@ const cssVariablesResolver = () => ({
 function App() {
   const { user, loading: authLoading } = useAuth();
   const { config, loading: configLoading } = useConfig();
-  const [onboarded, setOnboarded] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+
+  const onboardedKey = user ? `gl_onboarded_${user.email}` : null;
+  const [onboarded, setOnboarded] = useState(() =>
+    onboardedKey ? !!localStorage.getItem(onboardedKey) : false
+  );
 
   useEffect(() => {
     if (config.app_title) document.title = config.app_title;
@@ -49,7 +53,10 @@ function App() {
   }
 
   const isFresh = !onboarded && config.display_name === 'User';
-  if (isFresh) return <Onboarding onComplete={() => setOnboarded(true)} />;
+  if (isFresh) return <Onboarding onComplete={() => {
+    if (onboardedKey) localStorage.setItem(onboardedKey, '1');
+    setOnboarded(true);
+  }} />;
 
   return <Dashboard />;
 }

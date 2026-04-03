@@ -275,6 +275,8 @@ export default function Dashboard() {
   const DEFAULT_RIGHT = ['stocks', 'sports', 'events', 'restaurants'];
   const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
   const [rightOrder, setRightOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_right_order')) || DEFAULT_RIGHT; } catch { return DEFAULT_RIGHT; } });
+  const [zoom, setZoom] = useState(() => parseFloat(localStorage.getItem('gl_zoom') || '1'));
+  const setZoomSave = (z) => { const v = Math.min(1, Math.max(0.5, z)); localStorage.setItem('gl_zoom', v); setZoom(v); };
 
   useEffect(() => {
     if (!askLoading) { setAskDots(''); return; }
@@ -549,6 +551,11 @@ export default function Dashboard() {
               setRightOrder(DEFAULT_RIGHT);
             }}
           >Reset Layout</Button>
+          <Group gap={2} visibleFrom="sm">
+            <Button size="xs" variant="default" onClick={() => setZoomSave(zoom - 0.1)} disabled={zoom <= 0.5}>−</Button>
+            <Button size="xs" variant="default" onClick={() => setZoomSave(1)} style={{ minWidth: 44 }}>{Math.round(zoom * 100)}%</Button>
+            <Button size="xs" variant="default" onClick={() => setZoomSave(zoom + 0.1)} disabled={zoom >= 1}>+</Button>
+          </Group>
           <Button size="xs" variant="default" onClick={() => setSettingsOpen(true)}>⚙</Button>
           <Button
             size="xs" variant="default"
@@ -1065,6 +1072,7 @@ export default function Dashboard() {
         };
 
         return (
+          <Box style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: zoom < 1 ? `${100 / zoom}%` : "100%", marginBottom: zoom < 1 ? `${-(1 - zoom) * 100}%` : 0 }}>
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <Grid gutter="lg">
               <Grid.Col span={{ base: 12, md: 6 }}>
@@ -1087,6 +1095,7 @@ export default function Dashboard() {
               </Grid.Col>
             </Grid>
           </DndContext>
+          </Box>
         );
       })()}
 

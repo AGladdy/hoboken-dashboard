@@ -114,6 +114,10 @@ export default function AuthPage() {
 
   return (
     <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <style>{`
+        .google-btn-wrap > div { border: none !important; box-shadow: none !important; }
+        .google-btn-wrap iframe { border-radius: 6px !important; }
+      `}</style>
       <Paper withBorder p="xl" radius="lg" style={{ width: '100%', maxWidth: 400 }}>
         <Stack gap="xl">
           <Stack gap={4} align="center">
@@ -169,7 +173,7 @@ export default function AuthPage() {
           {(mode === 'login' || mode === 'signup') && GOOGLE_CLIENT_ID && (
             <>
               <Divider label="or" labelPosition="center" />
-              <Box ref={googleBtnRef} style={{ display: 'flex', justifyContent: 'center' }} />
+              <Box ref={googleBtnRef} className="google-btn-wrap" style={{ display: 'flex', justifyContent: 'center' }} />
             </>
           )}
 

@@ -1653,6 +1653,149 @@ async function fetchStravaDirectly(res, now, token) {
   }
 }
 
+// ========== GOOGLE CALENDAR ==========
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = `${process.env.APP_URL || 'https://hoboken-dashboard-production.up.railway.app'}/api/google/callback`;
+
+async function refreshGoogleToken(userId, tokens) {
+  if (Date.now() / 1000 < (tokens.expires_at || 0) - 60) return tokens;
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      refresh_token: tokens.refresh_token,
+      grant_type: "refresh_token",
+    }),
+  });
+  const data = await r.json();
+  if (!data.access_token) throw new Error("Token refresh failed");
+  const newTokens = { ...tokens, access_token: data.access_token, expires_at: Math.floor(Date.now() / 1000) + (data.expires_in || 3600) };
+  if (pool) {
+    await pool.query(
+      `INSERT INTO user_config (key, value, user_id) VALUES ('google_tokens', $1::jsonb, $2)
+       ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO UPDATE SET value=$1::jsonb, updated_at=NOW()`,
+      [JSON.stringify(newTokens), userId]
+    );
+    delete cachedConfigMap[userId];
+  }
+  return newTokens;
+}
+
+app.get("/api/google/status", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  res.json({ connected: Boolean(cfg.google_tokens?.refresh_token), email: cfg.google_tokens?.email || null });
+});
+
+app.get("/api/google/connect", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token;
+  let userId;
+  try {
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryToken;
+    if (!token) return res.status(401).json({ error: "unauthorized" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    userId = decoded.userId;
+  } catch {
+    return res.status(401).json({ error: "invalid token" });
+  }
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
+    access_type: "offline",
+    prompt: "consent",
+    state: userId,
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+app.get("/api/google/callback", async (req, res) => {
+  const { code, state: userId } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || 'https://www.gladdy.life';
+  if (!code || !userId) return res.redirect(`${frontendUrl}?google_error=invalid`);
+  try {
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        code,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
+    const data = await r.json();
+    if (!data.access_token) throw new Error(data.error_description || "Token exchange failed");
+
+    // Get user's email
+    const infoR = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${data.access_token}` },
+    });
+    const info = await infoR.json();
+
+    const tokens = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+      email: info.email || null,
+    };
+    if (pool) {
+      await pool.query(
+        `INSERT INTO user_config (key, value, user_id) VALUES ('google_tokens', $1::jsonb, $2)
+         ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO UPDATE SET value=$1::jsonb, updated_at=NOW()`,
+        [JSON.stringify(tokens), userId]
+      );
+      delete cachedConfigMap[userId];
+    }
+    res.redirect(`${frontendUrl}?google_connected=1`);
+  } catch (e) {
+    console.error("Google callback failed:", e.message);
+    res.redirect(`${frontendUrl}?google_error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+app.post("/api/google/disconnect", requireAuth, async (req, res) => {
+  if (pool) {
+    await pool.query("DELETE FROM user_config WHERE key = 'google_tokens' AND user_id = $1", [req.user.userId]);
+    delete cachedConfigMap[req.user.userId];
+  }
+  res.json({ ok: true });
+});
+
+app.get("/api/calendar", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  if (!cfg.google_tokens?.refresh_token) return res.json({ events: [], connected: false });
+  try {
+    const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
+    const now = new Date();
+    const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14).toISOString();
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=30`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    if (!r.ok) throw new Error(`Calendar API ${r.status}`);
+    const data = await r.json();
+    const events = (data.items || []).map(e => ({
+      id: e.id,
+      title: e.summary || "(No title)",
+      start: e.start?.dateTime || e.start?.date,
+      end: e.end?.dateTime || e.end?.date,
+      allDay: !e.start?.dateTime,
+      location: e.location || null,
+      color: e.colorId || null,
+      calendar: "primary",
+    }));
+    res.json({ events, connected: true });
+  } catch (e) {
+    console.error("Calendar fetch failed:", e.message);
+    res.json({ events: [], connected: true, error: e.message });
+  }
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", source: "panynj.gov", time: new Date().toISOString() });
 });

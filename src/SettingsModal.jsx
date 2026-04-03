@@ -63,6 +63,7 @@ function LineEditor({ line, onSave, onCancel }) {
 const ALL_SECTIONS = [
   { id: 'weather',     label: 'Weather' },
   { id: 'strava',      label: 'Fitness (Strava)' },
+  { id: 'calendar',    label: 'Google Calendar' },
   { id: 'path',        label: 'PATH Trains' },
   { id: 'ferry',       label: 'Ferry' },
   { id: 'bus',         label: 'Bus 126' },
@@ -93,12 +94,15 @@ export default function SettingsModal({ opened, onClose }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');
   const [stravaStatus, setStravaStatus] = useState(null);
+  const [googleStatus, setGoogleStatus] = useState(null);
 
   useEffect(() => {
     if (!opened) return;
-    fetch(`${API_BASE}/api/strava/status`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
-    }).then(r => r.json()).then(setStravaStatus).catch(() => {});
+    const token = localStorage.getItem('auth_token');
+    fetch(`${API_BASE}/api/strava/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setStravaStatus).catch(() => {});
+    fetch(`${API_BASE}/api/google/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setGoogleStatus).catch(() => {});
   }, [opened]);
 
   const save = async (patch, label) => {
@@ -154,6 +158,7 @@ export default function SettingsModal({ opened, onClose }) {
           <Tabs.Tab value="sections">Sections</Tabs.Tab>
           <Tabs.Tab value="stocks">Stocks</Tabs.Tab>
           <Tabs.Tab value="fitness">Fitness</Tabs.Tab>
+          <Tabs.Tab value="calendar">Calendar</Tabs.Tab>
           <Tabs.Tab value="account">Account</Tabs.Tab>
         </Tabs.List>
 
@@ -318,6 +323,31 @@ export default function SettingsModal({ opened, onClose }) {
                 component="a"
                 href={`${API_BASE}/api/strava/connect?token=${localStorage.getItem('auth_token')}`}
               >Connect Strava</Button>
+            )}
+          </Stack>
+        </Tabs.Panel>
+        <Tabs.Panel value="calendar">
+          <Stack gap="sm">
+            <Text size="sm" c="dimmed">Connect Google Calendar to show your upcoming events on the dashboard.</Text>
+            <Divider />
+            {googleStatus?.connected ? (
+              <Stack gap="sm">
+                <Text size="sm">Connected{googleStatus.email ? ` as ${googleStatus.email}` : ''}</Text>
+                <Button size="sm" variant="default" color="red" onClick={async () => {
+                  await fetch(`${API_BASE}/api/google/disconnect`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+                  });
+                  setGoogleStatus({ connected: false });
+                }}>Disconnect Google Calendar</Button>
+              </Stack>
+            ) : (
+              <Button
+                size="sm"
+                color="blue"
+                component="a"
+                href={`${API_BASE}/api/google/connect?token=${localStorage.getItem('auth_token')}`}
+              >Connect Google Calendar</Button>
             )}
           </Stack>
         </Tabs.Panel>

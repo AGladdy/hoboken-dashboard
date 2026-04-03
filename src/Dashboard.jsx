@@ -247,6 +247,8 @@ export default function Dashboard() {
   const [restaurantPick, setRestaurantPick] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPage, setEventPage] = useState(0);
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarConnected, setCalendarConnected] = useState(false);
   const [stravaPage, setStravaPage] = useState(0);
   const [stockSort, setStockSort] = useState({ col: 'rank', dir: 'asc' });
   const [stockRange, setStockRange] = useState('1M');
@@ -272,7 +274,7 @@ export default function Dashboard() {
   const ASK_LIMIT = 3;
 
   const DEFAULT_LEFT = ['weather', 'strava', 'path', 'ferry', 'bus', 'news'];
-  const DEFAULT_RIGHT = ['stocks', 'sports', 'events', 'restaurants'];
+  const DEFAULT_RIGHT = ['calendar', 'stocks', 'sports', 'events', 'restaurants'];
   const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
   const [rightOrder, setRightOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_right_order')) || DEFAULT_RIGHT; } catch { return DEFAULT_RIGHT; } });
   const [zoom, setZoom] = useState(() => parseFloat(localStorage.getItem('gl_zoom') || '1'));
@@ -448,18 +450,28 @@ export default function Dashboard() {
     } catch (e) { console.error("Strava fetch failed:", e); }
   }, []);
 
+  const fetchCalendar = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/api/calendar`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCalendarConnected(data.connected);
+      if (data.events) setCalendarEvents(data.events);
+    } catch (e) { console.error("Calendar fetch failed:", e); }
+  }, []);
+
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchSportsRecap();
-    fetchStrava(); fetchRestaurantPick();
+    fetchStrava(); fetchRestaurantPick(); fetchCalendar();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
       fetchWeatherNarrative(); fetchSportsRecap(); fetchStrava();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick, fetchCalendar]);
 
   useEffect(() => {
     stockRangeRef.current = stockRange;
@@ -478,8 +490,11 @@ export default function Dashboard() {
     } else if (params.get('strava_error')) {
       window.history.replaceState({}, '', window.location.pathname);
       setStravaError(decodeURIComponent(params.get('strava_error')));
+    } else if (params.get('google_connected')) {
+      window.history.replaceState({}, '', window.location.pathname);
+      fetchCalendar();
     }
-  }, [fetchStrava]);
+  }, [fetchStrava, fetchCalendar]);
 
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const estTrains = getEstimatedPathTrains(now, 6);
@@ -1039,6 +1054,57 @@ export default function Dashboard() {
                         {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
                       </Group>
                     ))}
+                  </SectionCard>
+                )}
+              </Box>
+            );
+            case 'calendar': return (
+              <Box key="calendar">
+                <SectionHeader badge="Cal" badgeColor="blue" title="My Calendar" dragHandle={dh} />
+                {!calendarConnected ? (
+                  <Card withBorder p="md" radius="md" mb="md">
+                    <Stack gap="sm" align="center">
+                      <Text size="sm" c="dimmed" ta="center">Connect Google Calendar to see your upcoming events here.</Text>
+                      <Button size="sm" color="blue" component="a" href={`${API_BASE}/api/google/connect?token=${localStorage.getItem('auth_token')}`}>
+                        Connect Google Calendar
+                      </Button>
+                    </Stack>
+                  </Card>
+                ) : calendarEvents.length === 0 ? (
+                  <Text size="sm" c="dimmed" mb="md">No upcoming events.</Text>
+                ) : (
+                  <SectionCard mb="md">
+                    {(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const grouped = {};
+                      calendarEvents.forEach(e => {
+                        const day = (e.start || '').split('T')[0];
+                        if (!grouped[day]) grouped[day] = [];
+                        grouped[day].push(e);
+                      });
+                      return Object.entries(grouped).slice(0, 7).map(([day, evts], gi, arr) => (
+                        <Box key={day}>
+                          <Box px="xs" py={4} style={{ background: "var(--mantine-color-default-hover)" }}>
+                            <Text size="xs" fw={600} c="dimmed">
+                              {day === today ? "Today" : new Date(day + 'T12:00:00').toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                            </Text>
+                          </Box>
+                          {evts.map((e, i) => {
+                            const isLast = gi === arr.length - 1 && i === evts.length - 1;
+                            const timeStr = e.allDay ? "All day" : new Date(e.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                            return (
+                              <Group key={e.id} px="xs" py={6} gap="sm" wrap="nowrap" style={{ borderBottom: !isLast ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                                <Text size="xs" c="blue" fw={500} style={{ width: 56, flexShrink: 0 }}>{timeStr}</Text>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <Text size="sm" truncate>{e.title}</Text>
+                                  {e.location && <Text size="xs" c="dimmed" truncate>{e.location}</Text>}
+                                </Box>
+                              </Group>
+                            );
+                          })}
+                        </Box>
+                      ));
+                    })()}
                   </SectionCard>
                 )}
               </Box>

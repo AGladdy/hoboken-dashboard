@@ -273,6 +273,7 @@ export default function Dashboard() {
   const [askLocked, setAskLocked] = useState(false);
   const [askPinError, setAskPinError] = useState(false);
   const ASK_LIMIT = 3;
+  const chatBottomRef = useRef(null);
 
   const DEFAULT_LEFT = ['weather', 'strava', 'path', 'ferry', 'bus', 'news'];
   const DEFAULT_RIGHT = ['calendar', 'stocks', 'sports', 'events', 'restaurants'];
@@ -294,6 +295,10 @@ export default function Dashboard() {
     const iv = setInterval(() => setAskDots(d => d.length >= 3 ? '' : d + '.'), 400);
     return () => clearInterval(iv);
   }, [askLoading]);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [askHistory, askLoading]);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
@@ -644,98 +649,22 @@ export default function Dashboard() {
       </SimpleGrid>
 
       {/* COMMAND BAR */}
-      <Paper withBorder p="sm" mb="md" radius="md">
-        {askLocked ? (
-          <Stack gap="xs" align="center" py="xs">
-            <Text size="xs" c="dimmed">Query limit reached — enter PIN to continue</Text>
-            <PinInput
-              length={4}
-              type="number"
-              mask
-              autoFocus
-              error={askPinError}
-              onComplete={async (val) => {
-                try {
-                  const res = await fetch(`${API_BASE}/api/config/verify-pin`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pin: val }),
-                  });
-                  const { valid } = await res.json();
-                  if (valid) {
-                    setAskCount(0);
-                    setAskLocked(false);
-                    setAskPinError(false);
-                  } else {
-                    setAskPinError(true);
-                    setTimeout(() => setAskPinError(false), 1000);
-                  }
-                } catch {
-                  setAskPinError(true);
-                  setTimeout(() => setAskPinError(false), 1000);
-                }
-              }}
-            />
-          </Stack>
-        ) : (
-          <form onSubmit={async (e) => {
-            e.preventDefault();
-            if (!askQuery.trim() || askLoading) return;
-            const newCount = askCount + 1;
-            const currentQuery = askQuery;
-            setAskLoading(true);
-            setAskAnswer(null);
-            setAskCount(newCount);
-            setAskQuery("");
-            try {
-              const res = await fetchWithAuth(CONFIG.ASK_API, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: currentQuery, history: askHistory }),
-              });
-              const data = await res.json();
-              const answer = data.answer || "";
-              setAskAnswer(answer);
-              setAskHistory(h => [...h, { role: "user", content: currentQuery }, { role: "assistant", content: answer }]);
-            } catch { setAskAnswer("Something went wrong."); }
-            finally {
-              setAskLoading(false);
-              if (newCount >= ASK_LIMIT) setAskLocked(true);
-            }
-          }}>
-            <Group gap="xs">
-              <TextInput
-                placeholder="Ask anything… fastest way to midtown? dinner ideas? what's happening tonight?"
-                value={askQuery}
-                onChange={e => setAskQuery(e.currentTarget.value)}
-                style={{ flex: 1 }}
-                size="sm"
-                leftSection={<Text size="sm">✦</Text>}
-              />
-              <Button type="submit" size="sm" variant="light" color="violet" loading={askLoading}>
-                Ask {askCount > 0 ? `(${ASK_LIMIT - askCount} left)` : ""}
-              </Button>
-            </Group>
-          </form>
-        )}
+      <Paper withBorder mb="md" radius="md" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Chat history — above the input */}
         {(askHistory.length > 0 || askLoading) && (
-          <Box mt="xs" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Box style={{ maxHeight: 420, overflowY: 'auto', padding: '12px 12px 4px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {askHistory.map((h, i) => {
               const isUser = h.role === "user";
               return (
-                <Box key={i} style={{ display: "flex", justifyContent: isUser ? "flex-start" : "flex-end" }}>
-                  <Box
-                    style={{
-                      maxWidth: "82%",
-                      background: isUser
-                        ? "var(--mantine-color-default-hover)"
-                        : "var(--mantine-color-violet-light)",
-                      borderRadius: isUser ? "4px 12px 12px 12px" : "12px 4px 12px 12px",
-                      padding: "8px 12px",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                    }}
-                  >
-                    <Text size="xs" fw={600} c={isUser ? "dimmed" : "violet"} mb={2}>
+                <Box key={i} style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+                  <Box style={{
+                    maxWidth: "82%",
+                    background: isUser ? "var(--mantine-color-violet-light)" : "var(--mantine-color-default-hover)",
+                    borderRadius: isUser ? "12px 4px 12px 12px" : "4px 12px 12px 12px",
+                    padding: "8px 12px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                  }}>
+                    <Text size="xs" fw={600} c={isUser ? "violet" : "dimmed"} mb={2}>
                       {isUser ? "You" : "✦ Gladdy"}
                     </Text>
                     {isUser ? (
@@ -750,15 +679,83 @@ export default function Dashboard() {
               );
             })}
             {askLoading && (
-              <Box style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Box style={{ background: "var(--mantine-color-violet-light)", borderRadius: "12px 4px 12px 12px", padding: "8px 12px" }}>
-                  <Text size="xs" fw={600} c="violet" mb={2}>✦ Gladdy</Text>
+              <Box style={{ display: "flex", justifyContent: "flex-start" }}>
+                <Box style={{ background: "var(--mantine-color-default-hover)", borderRadius: "4px 12px 12px 12px", padding: "8px 12px" }}>
+                  <Text size="xs" fw={600} c="dimmed" mb={2}>✦ Gladdy</Text>
                   <Text size="sm" c="dimmed" fs="italic">Thinking{askDots}</Text>
                 </Box>
               </Box>
             )}
+            <div ref={chatBottomRef} />
           </Box>
         )}
+        {/* Input bar — pinned at the bottom */}
+        <Box p="sm" style={{ borderTop: askHistory.length > 0 || askLoading ? '1px solid var(--mantine-color-default-border)' : undefined }}>
+          {askLocked ? (
+            <Stack gap="xs" align="center" py="xs">
+              <Text size="xs" c="dimmed">Query limit reached — enter PIN to continue</Text>
+              <PinInput
+                length={4}
+                type="number"
+                mask
+                autoFocus
+                error={askPinError}
+                onComplete={async (val) => {
+                  try {
+                    const res = await fetch(`${API_BASE}/api/config/verify-pin`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ pin: val }),
+                    });
+                    const { valid } = await res.json();
+                    if (valid) { setAskCount(0); setAskLocked(false); setAskPinError(false); }
+                    else { setAskPinError(true); setTimeout(() => setAskPinError(false), 1000); }
+                  } catch { setAskPinError(true); setTimeout(() => setAskPinError(false), 1000); }
+                }}
+              />
+            </Stack>
+          ) : (
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!askQuery.trim() || askLoading) return;
+              const newCount = askCount + 1;
+              const currentQuery = askQuery;
+              setAskLoading(true);
+              setAskAnswer(null);
+              setAskCount(newCount);
+              setAskQuery("");
+              try {
+                const res = await fetchWithAuth(CONFIG.ASK_API, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ query: currentQuery, history: askHistory }),
+                });
+                const data = await res.json();
+                const answer = data.answer || "";
+                setAskAnswer(answer);
+                setAskHistory(h => [...h, { role: "user", content: currentQuery }, { role: "assistant", content: answer }]);
+              } catch { setAskAnswer("Something went wrong."); }
+              finally {
+                setAskLoading(false);
+                if (newCount >= ASK_LIMIT) setAskLocked(true);
+              }
+            }}>
+              <Group gap="xs">
+                <TextInput
+                  placeholder="Ask anything… fastest way to midtown? dinner ideas? what's happening tonight?"
+                  value={askQuery}
+                  onChange={e => setAskQuery(e.currentTarget.value)}
+                  style={{ flex: 1 }}
+                  size="sm"
+                  leftSection={<Text size="sm">✦</Text>}
+                />
+                <Button type="submit" size="sm" variant="light" color="violet" loading={askLoading}>
+                  Ask {askCount > 0 ? `(${ASK_LIMIT - askCount} left)` : ""}
+                </Button>
+              </Group>
+            </form>
+          )}
+        </Box>
       </Paper>
 
       {/* TWO-COLUMN GRID */}

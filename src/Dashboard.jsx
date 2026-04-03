@@ -1136,7 +1136,15 @@ export default function Dashboard() {
         };
 
         return (
-          <Box style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: zoom < 1 ? `${100 / zoom}%` : "100%", marginBottom: zoom < 1 ? `${-(1 - zoom) * 100}%` : 0 }}>
+          <Box style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "top center",
+            marginBottom: zoom < 1 ? `${-(1 - zoom) * 100}%` : 0,
+            borderRadius: zoom < 1 ? `${(1 - zoom) * 48}px` : 0,
+            overflow: "hidden",
+            transition: "transform 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), border-radius 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), margin-bottom 0.5s cubic-bezier(0.34, 1.3, 0.64, 1)",
+            willChange: "transform",
+          }}>
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <Grid gutter="lg">
               <Grid.Col span={{ base: 12, md: 6 }}>

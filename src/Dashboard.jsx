@@ -1022,7 +1022,7 @@ export default function Dashboard() {
             );
             case 'events': return (
               <Box key="events">
-                <SectionHeader badge="Events" badgeColor="violet" title="NYC This Week" dragHandle={dh}
+                <SectionHeader badge="Events" badgeColor="violet" title={`${locationLabel} Events`} dragHandle={dh}
                   right={<Group gap="xs"><Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text><ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
                 <SectionCard mb="md">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box, Combobox, useCombobox, ScrollArea } from '@mantine/core';
+import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box, Combobox, useCombobox } from '@mantine/core';
 import { useConfig, API_BASE } from './ConfigContext';
 import { useAuth } from './AuthContext';
 
@@ -129,6 +129,12 @@ export default function SettingsModal({ opened, onClose }) {
   const saveProfile = () => save({ display_name: displayName, app_title: appTitle }, 'profile');
 
   const saveLocation = () => {
+    if (!restaurantUseGps && !restaurantCoords) {
+      setSaved('');
+      setSaving(false);
+      alert('Please search for and select a location before saving.');
+      return;
+    }
     save({
       location: { city, lat: Number(lat), lon: Number(lon), address },
       restaurant_location_mode: restaurantUseGps ? 'gps' : 'saved',
@@ -231,11 +237,9 @@ export default function SettingsModal({ opened, onClose }) {
                 </Combobox.Target>
                 <Combobox.Dropdown>
                   <Combobox.Options>
-                    <ScrollArea.Autosize mah={200}>
-                      {restaurantOptions.map(opt => (
-                        <Combobox.Option key={opt.label} value={opt.label}>{opt.label}</Combobox.Option>
-                      ))}
-                    </ScrollArea.Autosize>
+                    {restaurantOptions.map(opt => (
+                      <Combobox.Option key={opt.label} value={opt.label}>{opt.label}</Combobox.Option>
+                    ))}
                   </Combobox.Options>
                 </Combobox.Dropdown>
               </Combobox>

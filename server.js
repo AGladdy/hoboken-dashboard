@@ -655,14 +655,45 @@ app.get("/api/restaurants", optionalAuth, async (req, res) => {
 const TICKETMASTER_KEY = process.env.TICKETMASTER_KEY;
 let cachedEvents = null;
 let lastEventFetch = 0;
+const cachedEventsByLoc = {};
 
 app.get("/api/events", async (req, res) => {
   const now = Date.now();
+  const gpsLat = req.query.lat ? parseFloat(req.query.lat) : null;
+  const gpsLon = req.query.lon ? parseFloat(req.query.lon) : null;
+
+  const start = new Date().toISOString().split(".")[0] + "Z";
+  const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().split(".")[0] + "Z";
+
+  if (gpsLat && gpsLon) {
+    const locKey = `${gpsLat.toFixed(2)},${gpsLon.toFixed(2)}`;
+    const cached = cachedEventsByLoc[locKey];
+    if (cached && now - cached.ts < 3600000) return res.json(cached.data);
+    try {
+      const url = `https://app.ticketmaster.com/discovery/v2/events.json?latlong=${gpsLat},${gpsLon}&radius=25&unit=miles&startDateTime=${start}&endDateTime=${end}&size=50&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Ticketmaster HTTP ${r.status}`);
+      const data = await r.json();
+      const events = (data._embedded?.events || []).map(e => ({
+        name: e.name, date: e.dates?.start?.localDate, time: e.dates?.start?.localTime || null,
+        venue: e._embedded?.venues?.[0]?.name || null, category: e.classifications?.[0]?.segment?.name || "Event",
+        genre: e.classifications?.[0]?.genre?.name || null,
+        image: e.images?.find(i => i.ratio === "16_9" && i.width > 300)?.url || e.images?.[0]?.url || null,
+        url: e.url || null, priceMin: e.priceRanges?.[0]?.min || null, priceMax: e.priceRanges?.[0]?.max || null,
+      }));
+      const seen = new Set();
+      const deduped = events.filter(e => { if (seen.has(e.name)) return false; seen.add(e.name); return true; });
+      cachedEventsByLoc[locKey] = { ts: now, data: deduped };
+      return res.json(deduped);
+    } catch (e) {
+      console.error("GPS events fetch failed:", e.message);
+      return res.json([]);
+    }
+  }
+
   if (cachedEvents && now - lastEventFetch < 3600000) return res.json(cachedEvents);
 
   try {
-    const start = new Date().toISOString().split(".")[0] + "Z";
-    const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString().split(".")[0] + "Z";
     const url = `https://app.ticketmaster.com/discovery/v2/events.json?city=New+York&countryCode=US&startDateTime=${start}&endDateTime=${end}&size=50&sort=date,asc&apikey=${TICKETMASTER_KEY}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`Ticketmaster HTTP ${r.status}`);

@@ -431,12 +431,25 @@ export default function Dashboard() {
 
   const fetchEvents = useCallback(async () => {
     try {
-      const res = await fetch(CONFIG.EVENTS_API);
+      let url = CONFIG.EVENTS_API;
+      const savedLoc = config.restaurant_location;
+      const useGps = config.restaurant_location_mode !== 'saved';
+      if (!useGps && savedLoc?.lat && savedLoc?.lon) {
+        url += `?lat=${savedLoc.lat}&lon=${savedLoc.lon}`;
+      } else {
+        try {
+          const pos = await new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+          );
+          url += `?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
+        } catch {}
+      }
+      const res = await fetch(url);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.length > 0) setEvents(data);
     } catch (e) { console.error("Events fetch failed:", e); }
-  }, []);
+  }, [config.restaurant_location, config.restaurant_location_mode]);
 
   const fetchSports = useCallback(async () => {
     try {

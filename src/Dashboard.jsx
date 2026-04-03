@@ -912,7 +912,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
-                      {strava.chartData?.length > 0 && <BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} />}
+                      {strava.chartData?.length > 0 && <Box style={{ width: '100%', minWidth: 0 }}><BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} /></Box>}
                       <SectionCard mb="md">
                         {strava.activities.slice(stravaPage * STRAVA_PAGE_SIZE, (stravaPage + 1) * STRAVA_PAGE_SIZE).map((a, i, arr) => (
                           <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
@@ -1078,7 +1078,7 @@ export default function Dashboard() {
                                   {r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}
                                 </Text>
                                 <Text size="xs" c="dimmed" truncate>
-                                  {[r.category, r.price ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
+                                  {[r.category, r.price > 0 ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
                                 </Text>
                               </Box>
                               {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}

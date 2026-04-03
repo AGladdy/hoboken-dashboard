@@ -1535,7 +1535,7 @@ app.get("/api/strava/connect", (req, res) => {
   } catch {
     return res.status(401).json({ error: "invalid token" });
   }
-  const redirectUri = `${process.env.APP_URL || 'https://hoboken-dashboard-production.up.railway.app'}/api/strava/callback`;
+  const redirectUri = `${BACKEND_URL}/api/strava/callback`;
   const url = `https://www.strava.com/oauth/authorize?client_id=${process.env.STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=activity:read_all&state=${userId}`;
   res.redirect(url);
 });
@@ -1709,7 +1709,8 @@ async function fetchStravaDirectly(res, now, token) {
 // ========== GOOGLE CALENDAR ==========
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = `${process.env.APP_URL || 'https://hoboken-dashboard-production.up.railway.app'}/api/google/callback`;
+const BACKEND_URL = process.env.BACKEND_URL || 'https://hoboken-dashboard-production.up.railway.app';
+const GOOGLE_REDIRECT_URI = `${BACKEND_URL}/api/google/callback`;
 
 async function refreshGoogleToken(userId, tokens) {
   if (Date.now() / 1000 < (tokens.expires_at || 0) - 60) return tokens;

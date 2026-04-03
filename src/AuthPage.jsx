@@ -47,7 +47,7 @@ export default function AuthPage() {
         },
       });
       window.google?.accounts.id.renderButton(googleBtnRef.current, {
-        theme: 'outline', size: 'large', width: 352, text: 'continue_with',
+        theme: 'filled_black', size: 'large', width: 352, text: 'continue_with',
       });
     };
     document.head.appendChild(script);

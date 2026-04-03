@@ -7,6 +7,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
 import ReactMarkdown from "react-markdown";
+import CalendarSection from "./CalendarSection";
 import "@mantine/charts/styles.css";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
@@ -1074,55 +1075,7 @@ export default function Dashboard() {
               </Box>
             );
             case 'calendar': return (
-              <Box key="calendar">
-                <SectionHeader badge="Cal" badgeColor="blue" title="My Calendar" dragHandle={dh} />
-                {!calendarConnected ? (
-                  <Card withBorder p="md" radius="md" mb="md">
-                    <Stack gap="sm" align="center">
-                      <Text size="sm" c="dimmed" ta="center">Connect Google Calendar to see your upcoming events here.</Text>
-                      <Button size="sm" color="blue" component="a" href={`${API_BASE}/api/google/connect?token=${localStorage.getItem('auth_token')}`}>
-                        Connect Google Calendar
-                      </Button>
-                    </Stack>
-                  </Card>
-                ) : calendarEvents.length === 0 ? (
-                  <Text size="sm" c="dimmed" mb="md">No upcoming events.</Text>
-                ) : (
-                  <SectionCard mb="md">
-                    {(() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const grouped = {};
-                      calendarEvents.forEach(e => {
-                        const day = (e.start || '').split('T')[0];
-                        if (!grouped[day]) grouped[day] = [];
-                        grouped[day].push(e);
-                      });
-                      return Object.entries(grouped).slice(0, 7).map(([day, evts], gi, arr) => (
-                        <Box key={day}>
-                          <Box px="xs" py={4} style={{ background: "var(--mantine-color-default-hover)" }}>
-                            <Text size="xs" fw={600} c="dimmed">
-                              {day === today ? "Today" : new Date(day + 'T12:00:00').toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                            </Text>
-                          </Box>
-                          {evts.map((e, i) => {
-                            const isLast = gi === arr.length - 1 && i === evts.length - 1;
-                            const timeStr = e.allDay ? "All day" : new Date(e.start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-                            return (
-                              <Group key={e.id} px="xs" py={6} gap="sm" wrap="nowrap" style={{ borderBottom: !isLast ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                                <Text size="xs" c="blue" fw={500} style={{ width: 56, flexShrink: 0 }}>{timeStr}</Text>
-                                <Box style={{ flex: 1, minWidth: 0 }}>
-                                  <Text size="sm" truncate>{e.title}</Text>
-                                  {e.location && <Text size="xs" c="dimmed" truncate>{e.location}</Text>}
-                                </Box>
-                              </Group>
-                            );
-                          })}
-                        </Box>
-                      ));
-                    })()}
-                  </SectionCard>
-                )}
-              </Box>
+              <CalendarSection key="calendar" dh={dh} events={calendarEvents} connected={calendarConnected} onEventsChange={setCalendarEvents} />
             );
             default: return null;
           }

@@ -1759,7 +1759,7 @@ app.get("/api/google/connect", (req, res) => {
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: GOOGLE_REDIRECT_URI,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
+    scope: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email",
     access_type: "offline",
     prompt: "consent",
     state: userId,
@@ -1797,6 +1797,7 @@ app.get("/api/google/callback", async (req, res) => {
       refresh_token: data.refresh_token,
       expires_at: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
       email: info.email || null,
+      scope: "calendar",
     };
     if (pool) {
       await pool.query(
@@ -1821,32 +1822,146 @@ app.post("/api/google/disconnect", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+function normalizeGCalEvent(e, calId, calMeta) {
+  return {
+    id: e.id,
+    calendarId: calId,
+    calendarName: calMeta?.summary || calId,
+    backgroundColor: calMeta?.backgroundColor || null,
+    title: e.summary || "(No title)",
+    start: e.start?.dateTime || e.start?.date,
+    end: e.end?.dateTime || e.end?.date,
+    allDay: !e.start?.dateTime,
+    location: e.location || null,
+    description: e.description || null,
+    color: e.colorId || null,
+  };
+}
+
 app.get("/api/calendar", requireAuth, async (req, res) => {
   const cfg = await getConfigForUser(req.user.userId);
   if (!cfg.google_tokens?.refresh_token) return res.json({ events: [], connected: false });
+  if (cfg.google_tokens.scope !== "calendar") return res.json({ events: [], connected: true, needsReconnect: true });
   try {
     const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
     const now = new Date();
-    const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14).toISOString();
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=30`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-    if (!r.ok) throw new Error(`Calendar API ${r.status}`);
-    const data = await r.json();
-    const events = (data.items || []).map(e => ({
-      id: e.id,
-      title: e.summary || "(No title)",
-      start: e.start?.dateTime || e.start?.date,
-      end: e.end?.dateTime || e.end?.date,
-      allDay: !e.start?.dateTime,
-      location: e.location || null,
-      color: e.colorId || null,
-      calendar: "primary",
+    const timeMin = req.query.timeMin || new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const timeMax = req.query.timeMax || new Date(now.getFullYear(), now.getMonth() + 2, 1).toISOString();
+    const auth = { Authorization: `Bearer ${tokens.access_token}` };
+
+    // Get calendar list
+    const calListR = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=20", { headers: auth });
+    const calList = await calListR.json();
+    const cals = (calList.items || []).filter(c => c.selected !== false && ['owner','writer','reader'].includes(c.accessRole));
+
+    // Fetch events from all calendars in parallel
+    const results = await Promise.allSettled(cals.map(async cal => {
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=100`;
+      const r = await fetch(url, { headers: auth });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return (data.items || []).map(e => normalizeGCalEvent(e, cal.id, cal));
     }));
-    res.json({ events, connected: true });
+
+    const events = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    const calendars = cals.map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor }));
+    res.json({ events, connected: true, calendars });
   } catch (e) {
     console.error("Calendar fetch failed:", e.message);
     res.json({ events: [], connected: true, error: e.message });
+  }
+});
+
+app.get("/api/calendar/calendars", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  if (!cfg.google_tokens?.refresh_token) return res.json([]);
+  try {
+    const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
+    const r = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=20", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    const data = await r.json();
+    const cals = (data.items || [])
+      .filter(c => ['owner','writer'].includes(c.accessRole))
+      .map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor }));
+    res.json(cals);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+app.post("/api/calendar/events", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  if (!cfg.google_tokens?.refresh_token) return res.status(401).json({ error: "not connected" });
+  if (cfg.google_tokens.scope !== "calendar") return res.json({ needsReconnect: true });
+  try {
+    const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
+    const { title, start, end, allDay, description, location, calendarId = "primary" } = req.body;
+    const body = {
+      summary: title,
+      description: description || undefined,
+      location: location || undefined,
+      start: allDay ? { date: start } : { dateTime: start, timeZone: "America/New_York" },
+      end:   allDay ? { date: end }   : { dateTime: end,   timeZone: "America/New_York" },
+    };
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokens.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`Calendar API ${r.status}: ${await r.text()}`);
+    const event = await r.json();
+    res.json({ event: normalizeGCalEvent(event, calendarId, { summary: calendarId }) });
+  } catch (e) {
+    console.error("Create event failed:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch("/api/calendar/events/:eventId", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  if (!cfg.google_tokens?.refresh_token) return res.status(401).json({ error: "not connected" });
+  if (cfg.google_tokens.scope !== "calendar") return res.json({ needsReconnect: true });
+  try {
+    const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
+    const { title, start, end, allDay, description, location } = req.body;
+    const calendarId = req.query.calendarId || "primary";
+    const body = {};
+    if (title !== undefined) body.summary = title;
+    if (description !== undefined) body.description = description;
+    if (location !== undefined) body.location = location;
+    if (start !== undefined) body.start = allDay ? { date: start } : { dateTime: start, timeZone: "America/New_York" };
+    if (end !== undefined) body.end = allDay ? { date: end } : { dateTime: end, timeZone: "America/New_York" };
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${req.params.eventId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${tokens.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`Calendar API ${r.status}: ${await r.text()}`);
+    const event = await r.json();
+    res.json({ event: normalizeGCalEvent(event, calendarId, { summary: calendarId }) });
+  } catch (e) {
+    console.error("Update event failed:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/calendar/events/:eventId", requireAuth, async (req, res) => {
+  const cfg = await getConfigForUser(req.user.userId);
+  if (!cfg.google_tokens?.refresh_token) return res.status(401).json({ error: "not connected" });
+  if (cfg.google_tokens.scope !== "calendar") return res.json({ needsReconnect: true });
+  try {
+    const tokens = await refreshGoogleToken(req.user.userId, cfg.google_tokens);
+    const calendarId = req.query.calendarId || "primary";
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${req.params.eventId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!r.ok && r.status !== 404) throw new Error(`Calendar API ${r.status}`);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Delete event failed:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

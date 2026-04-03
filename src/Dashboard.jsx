@@ -1013,27 +1013,26 @@ export default function Dashboard() {
                 })()}
                 {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
                 {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
-                  <Stack gap="xs" mb="md">
-                    {(restaurants.some(r => r.area === "Nearby") ? restaurants : restaurants.filter(r => r.area === restaurantArea)).sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8).map((r, i) => (
-                      <Box key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", borderRadius: 8, background: "var(--mantine-color-default-hover)" }}>
+                  <SectionCard mb="md">
+                    {(restaurants.some(r => r.area === "Nearby") ? restaurants : restaurants.filter(r => r.area === restaurantArea))
+                      .sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 10).map((r, i, arr) => (
+                      <Group key={i} p="xs" gap="sm" wrap="nowrap" align="center" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                         {r.photo
-                          ? <img src={r.photo} alt={r.name} style={{ width: 48, height: 48, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                          : <Box style={{ width: 48, height: 48, borderRadius: 6, background: "var(--mantine-color-dark-5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text size="lg">🍽️</Text></Box>
+                          ? <img src={r.photo} alt={r.name} style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                          : <Box style={{ width: 40, height: 40, borderRadius: 6, background: "var(--mantine-color-default-hover)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text>🍽️</Text></Box>
                         }
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Group justify="space-between" wrap="nowrap" gap="xs">
-                            <Text size="sm" fw={600} truncate>{r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}</Text>
-                            {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
-                          </Group>
-                          <Group gap={6} mt={2}>
-                            <Text size="xs" c="dimmed">{r.category}</Text>
-                            {r.price && <Text size="xs" c="dimmed">· {"$".repeat(r.price)}</Text>}
-                            {r.address && <Text size="xs" c="dimmed" truncate>· {r.address.split(",").slice(0, 2).join(",")}</Text>}
-                          </Group>
+                          <Text size="sm" fw={600} truncate>
+                            {r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}
+                          </Text>
+                          <Text size="xs" c="dimmed" truncate>
+                            {[r.category, r.price ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
+                          </Text>
                         </Box>
-                      </Box>
+                        {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
+                      </Group>
                     ))}
-                  </Stack>
+                  </SectionCard>
                 )}
               </Box>
             );

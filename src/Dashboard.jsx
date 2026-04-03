@@ -1026,36 +1026,51 @@ export default function Dashboard() {
                 {(() => {
                   const hasNearby = restaurants.some(r => r.area === "Nearby");
                   const areas = [...new Set(restaurants.map(r => r.area))].filter(a => a !== "Nearby");
+                  const filtered = (hasNearby ? restaurants : restaurants.filter(r => r.area === restaurantArea))
+                    .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+                  const PAGE_SIZE = 10;
+                  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+                  const paged = filtered.slice(restaurantIdx * PAGE_SIZE, restaurantIdx * PAGE_SIZE + PAGE_SIZE);
                   return (
-                    <SectionHeader badge="Eat" badgeColor="orange"
-                      title={hasNearby ? "Nearby Restaurants" : "Where to Eat"} dragHandle={dh}
-                      right={!hasNearby && areas.length > 1 ? <SegmentedControl size="xs" value={restaurantArea} onChange={setRestaurantArea} data={areas} /> : null}
-                    />
+                    <>
+                      <SectionHeader badge="Eat" badgeColor="orange"
+                        title={hasNearby ? "Nearby Restaurants" : "Where to Eat"} dragHandle={dh}
+                        right={
+                          <Group gap="xs">
+                            {!hasNearby && areas.length > 1 && <SegmentedControl size="xs" value={restaurantArea} onChange={v => { setRestaurantArea(v); setRestaurantIdx(0); }} data={areas} />}
+                            {totalPages > 1 && <Group gap={2}>
+                              <Text size="xs" c="dimmed">{restaurantIdx + 1}/{totalPages}</Text>
+                              <ActionIcon size="sm" variant="default" disabled={restaurantIdx === 0} onClick={() => setRestaurantIdx(p => p - 1)}>‹</ActionIcon>
+                              <ActionIcon size="sm" variant="default" disabled={restaurantIdx >= totalPages - 1} onClick={() => setRestaurantIdx(p => p + 1)}>›</ActionIcon>
+                            </Group>}
+                          </Group>
+                        }
+                      />
+                      {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
+                      {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
+                        <SectionCard mb="md">
+                          {paged.map((r, i) => (
+                            <Group key={i} p="xs" gap="sm" wrap="nowrap" align="center" style={{ borderBottom: i < paged.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                              {r.photo
+                                ? <img src={r.photo} alt={r.name} style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                                : <Box style={{ width: 40, height: 40, borderRadius: 6, background: "var(--mantine-color-default-hover)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text>🍽️</Text></Box>
+                              }
+                              <Box style={{ flex: 1, minWidth: 0 }}>
+                                <Text size="sm" fw={600} truncate>
+                                  {r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}
+                                </Text>
+                                <Text size="xs" c="dimmed" truncate>
+                                  {[r.category, r.price ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
+                                </Text>
+                              </Box>
+                              {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
+                            </Group>
+                          ))}
+                        </SectionCard>
+                      )}
+                    </>
                   );
                 })()}
-                {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
-                {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
-                  <SectionCard mb="md">
-                    {(restaurants.some(r => r.area === "Nearby") ? restaurants : restaurants.filter(r => r.area === restaurantArea))
-                      .sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 10).map((r, i, arr) => (
-                      <Group key={i} p="xs" gap="sm" wrap="nowrap" align="center" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                        {r.photo
-                          ? <img src={r.photo} alt={r.name} style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                          : <Box style={{ width: 40, height: 40, borderRadius: 6, background: "var(--mantine-color-default-hover)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text>🍽️</Text></Box>
-                        }
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Text size="sm" fw={600} truncate>
-                            {r.website ? <Anchor href={r.website} target="_blank" c="inherit" underline="never">{r.name}</Anchor> : r.name}
-                          </Text>
-                          <Text size="xs" c="dimmed" truncate>
-                            {[r.category, r.price ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
-                          </Text>
-                        </Box>
-                        {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
-                      </Group>
-                    ))}
-                  </SectionCard>
-                )}
               </Box>
             );
             case 'calendar': return (

@@ -325,6 +325,55 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ userId: req.user.userId, email: req.user.email });
 });
 
+app.post("/api/auth/google", async (req, res) => {
+  const { token: idToken } = req.body || {};
+  if (!idToken) return res.status(400).json({ error: "id_token required" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  try {
+    // Verify ID token with Google
+    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+    const info = await r.json();
+    if (!r.ok || info.error) throw new Error(info.error || "Invalid token");
+    // Verify audience matches our client
+    if (info.aud !== GOOGLE_CLIENT_ID) throw new Error("Token audience mismatch");
+    const email = info.email?.toLowerCase().trim();
+    if (!email) throw new Error("No email in token");
+
+    // Upsert user — find existing or create new
+    let result = await pool.query("SELECT id, email FROM users WHERE email = $1", [email]);
+    let user;
+    if (result.rows.length > 0) {
+      user = result.rows[0];
+    } else {
+      // Create account with a random unusable password (Google users sign in via Google only)
+      const randomHash = await bcrypt.hash(crypto.randomUUID(), 10);
+      result = await pool.query(
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email",
+        [email, randomHash]
+      );
+      user = result.rows[0];
+      // Seed default config
+      const configDefaults = [
+        ['display_name', '"User"'], ['app_title', '"My Dashboard"'], ['pin_hash', '""'],
+        ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"Hoboken, NJ"}'],
+        ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+        ['stock_watchlist', 'null'],
+      ];
+      for (const [key, val] of configDefaults) {
+        await pool.query(
+          `INSERT INTO user_config (key, value, user_id) VALUES ($1, $2::jsonb, $3) ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO NOTHING`,
+          [key, val, user.id]
+        );
+      }
+    }
+    const jwtToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ token: jwtToken, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error("Google sign-in failed:", e.message);
+    res.status(401).json({ error: e.message || "Google sign-in failed" });
+  }
+});
+
 app.post("/api/auth/forgot-password", async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: "email required" });
@@ -507,11 +556,46 @@ app.get("/api/stocks", async (req, res) => {
   res.json(cachedStocksMap[rangeKey] || []);
 });
 
-const FOURSQUARE_KEY = process.env.FOURSQUARE_KEY;
+const GOOGLE_PLACES_KEY = process.env.GOOGLE_PLACES_KEY;
 const DEFAULT_RESTAURANT_LOCATIONS = [
-  { label: "Hoboken", ll: "40.7440,-74.0324", radius: 1500 },
-  { label: "Manhattan", ll: "40.7549,-73.9840", radius: 2000 },
+  { label: "Hoboken", lat: 40.7440, lon: -74.0324, radius: 1500 },
+  { label: "Manhattan", lat: 40.7549, lon: -73.9840, radius: 2000 },
 ];
+
+async function fetchGooglePlaces(lat, lon, radius) {
+  const url = `https://places.googleapis.com/v1/places:searchNearby`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": GOOGLE_PLACES_KEY,
+      "X-Goog-FieldMask": "places.displayName,places.rating,places.priceLevel,places.primaryTypeDisplayName,places.formattedAddress,places.websiteUri,places.photos,places.googleMapsUri",
+    },
+    body: JSON.stringify({
+      includedTypes: ["restaurant"],
+      maxResultCount: 20,
+      rankPreference: "POPULARITY",
+      locationRestriction: { circle: { center: { latitude: lat, longitude: lon }, radius } },
+    }),
+  });
+  if (!r.ok) throw new Error(`Google Places HTTP ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  return (data.places || []).map(place => ({
+    name: place.displayName?.text || "",
+    rating: place.rating || null,
+    price: place.priceLevel ? ["", "$", "$$", "$$$", "$$$$"].indexOf(place.priceLevel.replace("PRICE_LEVEL_", "").replace("INEXPENSIVE","$").replace("MODERATE","$$").replace("EXPENSIVE","$$$").replace("VERY_EXPENSIVE","$$$$")) : null,
+    category: place.primaryTypeDisplayName?.text || "Restaurant",
+    address: place.formattedAddress || "",
+    photo: place.photos?.[0] ? `https://places.googleapis.com/v1/${place.photos[0].name}/media?maxHeightPx=200&maxWidthPx=300&key=${GOOGLE_PLACES_KEY}` : null,
+    website: place.websiteUri || place.googleMapsUri || null,
+  }));
+}
+
+// Simpler price mapping for Google Places API
+function mapGooglePrice(priceLevel) {
+  const map = { "PRICE_LEVEL_FREE": 0, "PRICE_LEVEL_INEXPENSIVE": 1, "PRICE_LEVEL_MODERATE": 2, "PRICE_LEVEL_EXPENSIVE": 3, "PRICE_LEVEL_VERY_EXPENSIVE": 4 };
+  return map[priceLevel] || null;
+}
 
 let cachedRestaurants = null;
 let lastRestaurantFetch = 0;
@@ -522,28 +606,13 @@ app.get("/api/restaurants", optionalAuth, async (req, res) => {
   const gpsLat = req.query.lat ? parseFloat(req.query.lat) : null;
   const gpsLon = req.query.lon ? parseFloat(req.query.lon) : null;
 
-  // If GPS coords provided, fetch live nearby results (short cache per coord pair)
   if (gpsLat && gpsLon) {
     const locKey = `${gpsLat.toFixed(3)},${gpsLon.toFixed(3)}`;
     const cached = cachedRestaurantsByLoc[locKey];
     if (cached && now - cached.ts < 3600000) return res.json(cached.data);
     try {
-      // 13065 = Restaurants only (not cafes, bars, parks, etc.)
-      const url = `https://places-api.foursquare.com/places/search?ll=${gpsLat},${gpsLon}&radius=800&categories=13065&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
-      if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
-      const data = await r.json();
-      const results = (data.results || [])
-        .map(place => ({
-          name: place.name,
-          area: "Nearby",
-          rating: place.rating || null,
-          price: place.price || null,
-          category: place.categories?.[0]?.name || "Restaurant",
-          address: place.location?.formatted_address || place.location?.address || "",
-          photo: place.photos?.[0] ? `${place.photos[0].prefix}300x200${place.photos[0].suffix}` : null,
-          website: place.website || null,
-        }));
+      const places = await fetchGooglePlaces(gpsLat, gpsLon, 800);
+      const results = places.map(p => ({ ...p, area: "Nearby" }));
       cachedRestaurantsByLoc[locKey] = { ts: now, data: results };
       return res.json(results);
     } catch (e) {
@@ -552,30 +621,14 @@ app.get("/api/restaurants", optionalAuth, async (req, res) => {
     }
   }
 
-  // Fallback: use config location
   if (cachedRestaurants && now - lastRestaurantFetch < 3600000) return res.json(cachedRestaurants);
   try {
     const cfg = await getConfig();
     const locations = cfg.restaurant_locations || DEFAULT_RESTAURANT_LOCATIONS;
     const all = [];
     for (const loc of locations) {
-      // 13065 = Restaurants only
-      const url = `https://places-api.foursquare.com/places/search?ll=${loc.ll}&radius=${loc.radius}&categories=13065&sort=RATING&limit=50&fields=name,rating,price,categories,location,photos,website,tel`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${FOURSQUARE_KEY}`, Accept: "application/json", "X-Places-Api-Version": "2025-06-17" } });
-      if (!r.ok) throw new Error(`Foursquare HTTP ${r.status}`);
-      const data = await r.json();
-      for (const place of data.results || []) {
-        all.push({
-          name: place.name,
-          area: loc.label,
-          rating: place.rating || null,
-          price: place.price || null,
-          category: cat || "Restaurant",
-          address: place.location?.formatted_address || place.location?.address || "",
-          photo: place.photos?.[0] ? `${place.photos[0].prefix}300x200${place.photos[0].suffix}` : null,
-          website: place.website || null,
-        });
-      }
+      const places = await fetchGooglePlaces(loc.lat, loc.lon, loc.radius);
+      all.push(...places.map(p => ({ ...p, area: loc.label })));
     }
     if (all.length > 0) {
       cachedRestaurants = all;

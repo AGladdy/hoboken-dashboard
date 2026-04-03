@@ -45,6 +45,20 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const googleLogin = useCallback(async (idToken) => {
+    const res = await fetch(`${API_BASE}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: idToken }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Google sign-in failed');
+    localStorage.setItem('auth_token', data.token);
+    setToken(data.token);
+    setUser(data.user);
+    return data;
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('auth_token');
     setToken(null);
@@ -52,7 +66,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, googleLogin }}>
       {children}
     </AuthContext.Provider>
   );

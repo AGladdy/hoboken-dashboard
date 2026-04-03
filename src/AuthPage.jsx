@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Box, Paper, Stack, Title, Text, TextInput, PasswordInput, Button, Anchor, ThemeIcon, Alert } from '@mantine/core';
+import { useState, useEffect, useRef } from 'react';
+import { Box, Paper, Stack, Title, Text, TextInput, PasswordInput, Button, Anchor, ThemeIcon, Alert, Divider } from '@mantine/core';
 import { useAuth } from './AuthContext';
 import { API_BASE } from './ConfigContext';
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
 export default function AuthPage() {
-  const { login, signup } = useAuth();
+  const { login, signup, googleLogin } = useAuth();
+  const googleBtnRef = useRef(null);
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +25,34 @@ export default function AuthPage() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !googleBtnRef.current) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => {
+      window.google?.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async ({ credential }) => {
+          setError('');
+          setLoading(true);
+          try {
+            await googleLogin(credential);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
+      window.google?.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline', size: 'large', width: 352, text: 'continue_with',
+      });
+    };
+    document.head.appendChild(script);
+    return () => script.remove();
+  }, [googleLogin]);
 
   const submit = async () => {
     setError('');
@@ -134,6 +165,13 @@ export default function AuthPage() {
               </Button>
             )}
           </Stack>
+
+          {(mode === 'login' || mode === 'signup') && GOOGLE_CLIENT_ID && (
+            <>
+              <Divider label="or" labelPosition="center" />
+              <Box ref={googleBtnRef} style={{ display: 'flex', justifyContent: 'center' }} />
+            </>
+          )}
 
           <Stack gap={4} align="center">
             {mode === 'login' && (

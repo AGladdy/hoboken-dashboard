@@ -243,11 +243,17 @@ function EventModal({ opened, mode, event, defaultDate, defaultHour, calendars, 
     if (!form.title.trim()) return;
     setSaving(true);
     try {
+      // Google Calendar requires all-day end = day after start (exclusive)
+      const allDayEnd = (() => {
+        const d = new Date(form.date + 'T12:00:00');
+        d.setDate(d.getDate() + 1);
+        return toDateStr(d);
+      })();
       const payload = {
         title: form.title.trim(),
         allDay: form.allDay,
         start: form.allDay ? form.date : toLocalISO(form.date, form.startTime),
-        end: form.allDay ? form.date : toLocalISO(form.date, form.endTime),
+        end: form.allDay ? allDayEnd : toLocalISO(form.date, form.endTime),
         description: form.description || '',
         location: form.location || '',
         calendarId: form.calendarId,
@@ -416,6 +422,8 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
     });
     const data = await res.json();
     if (data.needsReconnect) { setNeedsReconnect(true); return; }
+    if (data.error) { console.error('Save event error:', data.error); return; }
+    if (!data.event) return;
     if (existingEvent) {
       onEventsChange(prev => prev.map(e => e.id === data.event.id ? data.event : e));
     } else {

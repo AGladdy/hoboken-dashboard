@@ -230,7 +230,7 @@ export default function Dashboard() {
   const { setColorScheme } = useMantineColorScheme();
   const colorScheme = useComputedColorScheme("dark");
   const dark = colorScheme === "dark";
-  const { config } = useConfig();
+  const { config, saveConfig } = useConfig();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [now, setNow] = useState(new Date());
@@ -277,7 +277,15 @@ export default function Dashboard() {
   const DEFAULT_LEFT = ['weather', 'strava', 'path', 'ferry', 'bus', 'news'];
   const DEFAULT_RIGHT = ['calendar', 'stocks', 'sports', 'events', 'restaurants'];
   const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
-  const [rightOrder, setRightOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_right_order')) || DEFAULT_RIGHT; } catch { return DEFAULT_RIGHT; } });
+  const [rightOrder, setRightOrder] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gl_right_order'));
+      if (!saved) return DEFAULT_RIGHT;
+      // Ensure 'calendar' is present for users with old saved layouts
+      if (!saved.includes('calendar')) { const next = ['calendar', ...saved]; localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; }
+      return saved;
+    } catch { return DEFAULT_RIGHT; }
+  });
   const [zoom, setZoom] = useState(() => parseFloat(localStorage.getItem('gl_zoom') || '1'));
   const setZoomSave = (z) => { const v = Math.min(1, Math.max(0.5, z)); localStorage.setItem('gl_zoom', v); setZoom(v); };
 
@@ -369,19 +377,24 @@ export default function Dashboard() {
   const fetchRestaurants = useCallback(async () => {
     try {
       let url = CONFIG.RESTAURANTS_API;
-      // Try to get GPS position first for truly nearby results
-      try {
-        const pos = await new Promise((resolve, reject) =>
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
-        );
-        url += `?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
-      } catch {} // if denied or unavailable, fall back to config location
+      const savedLoc = config.restaurant_location;
+      const useGps = config.restaurant_location_mode !== 'saved';
+      if (!useGps && savedLoc?.lat && savedLoc?.lon) {
+        url += `?lat=${savedLoc.lat}&lon=${savedLoc.lon}`;
+      } else {
+        try {
+          const pos = await new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+          );
+          url += `?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`;
+        } catch {} // if denied or unavailable, fall back to server default
+      }
       const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (data.length > 0) setRestaurants(data);
     } catch (e) { console.error("Restaurant fetch failed:", e); }
-  }, []);
+  }, [config.restaurant_location, config.restaurant_location_mode]);
 
   const fetchRestaurantPick = useCallback(async () => {
     try {
@@ -458,8 +471,15 @@ export default function Dashboard() {
       const data = await res.json();
       setCalendarConnected(data.connected);
       if (data.events) setCalendarEvents(data.events);
+      // Auto-add 'calendar' to visible sections for users who connected before it was in the defaults
+      if (data.connected) {
+        const vs = config.visible_sections;
+        if (vs && !vs.includes('calendar')) {
+          saveConfig({ visible_sections: [...vs, 'calendar'] });
+        }
+      }
     } catch (e) { console.error("Calendar fetch failed:", e); }
-  }, []);
+  }, [config.visible_sections, saveConfig]);
 
   useEffect(() => {
     fetchWeather(); fetchStocks(); fetchRestaurants();

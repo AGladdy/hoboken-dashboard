@@ -438,7 +438,7 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
       {/* Header */}
       <Group justify="space-between" mb="sm" wrap="nowrap">
         <Group gap="xs" wrap="nowrap">
-          {dh}
+          {dh && <Box component="span" {...dh} style={{ cursor: "grab", color: "var(--mantine-color-dimmed)", fontSize: 14, lineHeight: 1, touchAction: "none", userSelect: "none" }} title="Drag to reorder">⠿</Box>}
           <Badge color="blue" variant="filled" size="sm" radius="sm">Cal</Badge>
           <Text fw={500} size="sm">
             {view === 'month'

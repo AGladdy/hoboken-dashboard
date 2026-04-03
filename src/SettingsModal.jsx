@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box } from '@mantine/core';
+import { useState, useEffect, useRef } from 'react';
+import { Modal, Tabs, TextInput, NumberInput, PinInput, Button, Stack, Switch, Group, Text, Divider, Textarea, Select, ActionIcon, Badge, Box, Combobox, useCombobox, ScrollArea } from '@mantine/core';
 import { useConfig, API_BASE } from './ConfigContext';
 import { useAuth } from './AuthContext';
 
@@ -91,6 +91,16 @@ export default function SettingsModal({ opened, onClose }) {
   const [watchlist, setWatchlist] = useState(config.stock_watchlist ? config.stock_watchlist.join(', ') : '');
   const [transitLines, setTransitLines] = useState(config.transit_lines || []);
   const [editingLine, setEditingLine] = useState(null); // null | 'new' | line object
+  const [restaurantUseGps, setRestaurantUseGps] = useState(
+    config.restaurant_location_mode !== 'saved'
+  );
+  const [restaurantQuery, setRestaurantQuery] = useState(config.restaurant_location?.label || '');
+  const [restaurantCoords, setRestaurantCoords] = useState(
+    config.restaurant_location ? { lat: config.restaurant_location.lat, lon: config.restaurant_location.lon, label: config.restaurant_location.label } : null
+  );
+  const [restaurantOptions, setRestaurantOptions] = useState([]);
+  const restaurantCombobox = useCombobox({ onDropdownClose: () => restaurantCombobox.resetSelectedOption() });
+  const restaurantDebounce = useRef(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState('');
   const [stravaStatus, setStravaStatus] = useState(null);
@@ -119,10 +129,28 @@ export default function SettingsModal({ opened, onClose }) {
   const saveProfile = () => save({ display_name: displayName, app_title: appTitle }, 'profile');
 
   const saveLocation = () => {
-    if (navigator.geolocation) {
-      // optional: could auto-fill but just save what's entered
-    }
-    save({ location: { city, lat: Number(lat), lon: Number(lon), address } }, 'location');
+    save({
+      location: { city, lat: Number(lat), lon: Number(lon), address },
+      restaurant_location_mode: restaurantUseGps ? 'gps' : 'saved',
+      restaurant_location: !restaurantUseGps && restaurantCoords ? restaurantCoords : null,
+    }, 'location');
+  };
+
+  const geocodeRestaurantQuery = (q) => {
+    clearTimeout(restaurantDebounce.current);
+    if (q.length < 2) { setRestaurantOptions([]); return; }
+    restaurantDebounce.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en&format=json`);
+        const d = await r.json();
+        const results = (d.results || []).map(x => ({
+          label: [x.name, x.admin1, x.country_code].filter(Boolean).join(', '),
+          lat: x.latitude, lon: x.longitude,
+        }));
+        setRestaurantOptions(results);
+        if (results.length > 0) restaurantCombobox.openDropdown();
+      } catch {}
+    }, 350);
   };
 
   const useMyLocation = () => {
@@ -179,6 +207,39 @@ export default function SettingsModal({ opened, onClose }) {
               <NumberInput label="Longitude" value={lon} onChange={setLon} decimalScale={6} step={0.001} />
             </Group>
             <Button size="xs" variant="default" onClick={useMyLocation}>Use my current location</Button>
+            <Divider label="Restaurants" labelPosition="left" mt="xs" />
+            <Switch
+              label="Use GPS for nearby restaurants"
+              checked={restaurantUseGps}
+              onChange={e => setRestaurantUseGps(e.currentTarget.checked)}
+            />
+            {!restaurantUseGps && (
+              <Combobox store={restaurantCombobox} onOptionSubmit={val => {
+                const opt = restaurantOptions.find(o => o.label === val);
+                if (opt) { setRestaurantCoords(opt); setRestaurantQuery(opt.label); }
+                restaurantCombobox.closeDropdown();
+              }}>
+                <Combobox.Target>
+                  <TextInput
+                    label="Search for a location"
+                    placeholder="e.g. Hoboken, NJ"
+                    value={restaurantQuery}
+                    onChange={e => { setRestaurantQuery(e.currentTarget.value); geocodeRestaurantQuery(e.currentTarget.value); }}
+                    onFocus={() => restaurantOptions.length > 0 && restaurantCombobox.openDropdown()}
+                    description={restaurantCoords ? `${restaurantCoords.lat.toFixed(4)}, ${restaurantCoords.lon.toFixed(4)}` : 'Type to search and select a location'}
+                  />
+                </Combobox.Target>
+                <Combobox.Dropdown>
+                  <Combobox.Options>
+                    <ScrollArea.Autosize mah={200}>
+                      {restaurantOptions.map(opt => (
+                        <Combobox.Option key={opt.label} value={opt.label}>{opt.label}</Combobox.Option>
+                      ))}
+                    </ScrollArea.Autosize>
+                  </Combobox.Options>
+                </Combobox.Dropdown>
+              </Combobox>
+            )}
             <Button size="sm" onClick={saveLocation} loading={saving}>{saved === 'location' ? 'Saved!' : 'Save'}</Button>
           </Stack>
         </Tabs.Panel>

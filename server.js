@@ -105,7 +105,7 @@ async function initDb() {
     ['app_title', '"My Dashboard"'],
     ['pin_hash', '""'],
     ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"The White House, 1600 Pennsylvania Ave NW, Washington, DC"}'],
-    ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+    ['visible_sections', '["weather","strava","path","ferry","bus","news","calendar","stocks","sports","events","restaurants"]'],
     ['stock_watchlist', 'null'],
   ];
   for (const [key, val] of defaults) {
@@ -169,7 +169,7 @@ const DEFAULT_CONFIG = {
   app_title: "My Dashboard",
   pin_hash: "",
   location: { city: "Hoboken, NJ", lat: 40.744, lon: -74.032, address: "The White House, 1600 Pennsylvania Ave NW, Washington, DC" },
-  visible_sections: ["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"],
+  visible_sections: ["weather","strava","path","ferry","bus","news","calendar","stocks","sports","events","restaurants"],
 };
 
 async function getConfigForUser(userId) {
@@ -284,7 +284,7 @@ app.post("/api/auth/signup", async (req, res) => {
       ['app_title', '"My Dashboard"'],
       ['pin_hash', '""'],
       ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"The White House, 1600 Pennsylvania Ave NW, Washington, DC"}'],
-      ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+      ['visible_sections', '["weather","strava","path","ferry","bus","news","calendar","stocks","sports","events","restaurants"]'],
       ['stock_watchlist', 'null'],
     ];
     for (const [key, val] of configDefaults) {
@@ -356,7 +356,7 @@ app.post("/api/auth/google", async (req, res) => {
       const configDefaults = [
         ['display_name', '"User"'], ['app_title', '"My Dashboard"'], ['pin_hash', '""'],
         ['location', '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"Hoboken, NJ"}'],
-        ['visible_sections', '["weather","strava","path","ferry","bus","news","stocks","sports","events","restaurants"]'],
+        ['visible_sections', '["weather","strava","path","ferry","bus","news","calendar","stocks","sports","events","restaurants"]'],
         ['stock_watchlist', 'null'],
       ];
       for (const [key, val] of configDefaults) {

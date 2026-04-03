@@ -672,12 +672,12 @@ export default function Dashboard() {
                 <Box key={i} style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
                   <Box style={{
                     maxWidth: "82%",
-                    background: isUser ? "var(--mantine-color-violet-light)" : "var(--mantine-color-default-hover)",
+                    background: isUser ? "var(--mantine-color-default-hover)" : "var(--mantine-color-violet-light)",
                     borderRadius: isUser ? "12px 4px 12px 12px" : "4px 12px 12px 12px",
                     padding: "8px 12px",
                     boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
                   }}>
-                    <Text size="xs" fw={600} c={isUser ? "violet" : "dimmed"} mb={2}>
+                    <Text size="xs" fw={600} c={isUser ? "dimmed" : "violet"} mb={2}>
                       {isUser ? "You" : "✦ Gladdy"}
                     </Text>
                     {isUser ? (
@@ -693,8 +693,8 @@ export default function Dashboard() {
             })}
             {askLoading && (
               <Box style={{ display: "flex", justifyContent: "flex-start" }}>
-                <Box style={{ background: "var(--mantine-color-default-hover)", borderRadius: "4px 12px 12px 12px", padding: "8px 12px" }}>
-                  <Text size="xs" fw={600} c="dimmed" mb={2}>✦ Gladdy</Text>
+                <Box style={{ background: "var(--mantine-color-violet-light)", borderRadius: "4px 12px 12px 12px", padding: "8px 12px" }}>
+                  <Text size="xs" fw={600} c="violet" mb={2}>✦ Gladdy</Text>
                   <Text size="sm" c="dimmed" fs="italic">Thinking{askDots}</Text>
                 </Box>
               </Box>

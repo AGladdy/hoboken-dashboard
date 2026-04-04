@@ -193,6 +193,15 @@ function SectionHeader({ badge, badgeColor = "violet", title, right, dragHandle 
   );
 }
 
+// Modifier: pin overlay top to cursor position regardless of where in the element you grabbed
+const snapOverlayToCursor = ({ activatorEvent, draggingNodeRect, transform }) => {
+  if (!activatorEvent || !draggingNodeRect) return transform;
+  return {
+    ...transform,
+    y: transform.y + (activatorEvent.clientY - draggingNodeRect.top - 4),
+  };
+};
+
 // ========== SORTABLE SECTION ==========
 function SortableSection({ id, children }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -1181,7 +1190,7 @@ export default function Dashboard() {
                 </SortableContext>
               </Grid.Col>
             </Grid>
-            <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
+            <DragOverlay modifiers={[snapOverlayToCursor]} dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
               {activeId ? (() => {
                 const labels = { weather: ['Weather', 'blue'], path: ['PATH', 'violet'], ferry: ['Ferry', 'blue'], bus: ['Bus', 'orange'], news: ['News', 'blue'], strava: ['Fitness', 'orange'], stocks: ['Stocks', 'green'], sports: ['Sports', 'violet'], events: ['Events', 'violet'], restaurants: ['Restaurants', 'pink'], calendar: ['Calendar', 'blue'] };
                 const [label, color] = labels[activeId] ?? [activeId, 'gray'];

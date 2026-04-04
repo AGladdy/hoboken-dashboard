@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { PinInput } from "@mantine/core";
 import { DndContext, closestCenter, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useConfig, API_BASE, fetchWithAuth } from "./ConfigContext";
@@ -1159,28 +1159,40 @@ export default function Dashboard() {
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <SortableContext items={leftOrder} strategy={verticalListSortingStrategy}>
                   {leftOrder.map((id, idx) => (
-                    <SortableSection key={id} id={id}>
-                      {(dh) => <Box>{idx > 0 && <Divider mb="md" />}{renderSection(id, dh)}</Box>}
-                    </SortableSection>
+                    <Fragment key={id}>
+                      {idx > 0 && <Divider mb="md" />}
+                      <SortableSection id={id}>
+                        {(dh) => renderSection(id, dh)}
+                      </SortableSection>
+                    </Fragment>
                   ))}
                 </SortableContext>
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <SortableContext items={rightOrder} strategy={verticalListSortingStrategy}>
                   {rightOrder.map((id, idx) => (
-                    <SortableSection key={id} id={id}>
-                      {(dh) => <Box>{idx > 0 && <Divider mb="md" />}{renderSection(id, dh)}</Box>}
-                    </SortableSection>
+                    <Fragment key={id}>
+                      {idx > 0 && <Divider mb="md" />}
+                      <SortableSection id={id}>
+                        {(dh) => renderSection(id, dh)}
+                      </SortableSection>
+                    </Fragment>
                   ))}
                 </SortableContext>
               </Grid.Col>
             </Grid>
             <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
-              {activeId ? (
-                <Box style={{ opacity: 0.92, boxShadow: '0 8px 32px rgba(0,0,0,0.32)', borderRadius: 8, background: 'var(--mantine-color-body)', padding: '0 0 8px' }}>
-                  {renderSection(activeId, null)}
-                </Box>
-              ) : null}
+              {activeId ? (() => {
+                const labels = { weather: ['Weather', 'blue'], path: ['PATH', 'violet'], ferry: ['Ferry', 'blue'], bus: ['Bus', 'orange'], news: ['News', 'blue'], strava: ['Fitness', 'orange'], stocks: ['Stocks', 'green'], sports: ['Sports', 'violet'], events: ['Events', 'violet'], restaurants: ['Restaurants', 'pink'], calendar: ['Calendar', 'blue'] };
+                const [label, color] = labels[activeId] ?? [activeId, 'gray'];
+                return (
+                  <Group gap="xs" style={{ background: 'var(--mantine-color-body)', border: '1px solid var(--mantine-color-default-border)', borderRadius: 8, padding: '8px 12px', boxShadow: '0 8px 24px rgba(0,0,0,0.28)', cursor: 'grabbing' }}>
+                    <Text style={{ color: 'var(--mantine-color-dimmed)', fontSize: 14, lineHeight: 1 }}>⠿</Text>
+                    <Badge color={color} variant="filled" size="sm" radius="sm">{label}</Badge>
+                    <Text size="sm" fw={500} c="dimmed">Moving…</Text>
+                  </Group>
+                );
+              })() : null}
             </DragOverlay>
           </DndContext>
           </Box>

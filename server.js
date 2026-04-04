@@ -6,6 +6,7 @@ import pkg from "pg";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
+import { createPublicKey } from "crypto";
 const { Pool } = pkg;
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -371,6 +372,63 @@ app.post("/api/auth/google", async (req, res) => {
   } catch (e) {
     console.error("Google sign-in failed:", e.message);
     res.status(401).json({ error: e.message || "Google sign-in failed" });
+  }
+});
+
+app.post("/api/auth/apple", async (req, res) => {
+  const { token: idToken } = req.body || {};
+  if (!idToken) return res.status(400).json({ error: "id_token required" });
+  if (!pool) return res.status(503).json({ error: "database unavailable" });
+  const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID;
+  if (!APPLE_CLIENT_ID) return res.status(503).json({ error: "Apple sign-in not configured" });
+  try {
+    // Decode header to find key id
+    const headerB64 = idToken.split(".")[0];
+    const header = JSON.parse(Buffer.from(headerB64, "base64url").toString());
+    // Fetch Apple's public JWKS
+    const keysRes = await fetch("https://appleid.apple.com/auth/keys");
+    const { keys } = await keysRes.json();
+    const jwk = keys.find(k => k.kid === header.kid);
+    if (!jwk) throw new Error("No matching Apple public key");
+    const publicKey = createPublicKey({ key: jwk, format: "jwk" });
+    // Verify JWT
+    const payload = jwt.verify(idToken, publicKey, {
+      algorithms: ["RS256"],
+      issuer: "https://appleid.apple.com",
+      audience: APPLE_CLIENT_ID,
+    });
+    const email = payload.email?.toLowerCase().trim();
+    if (!email) throw new Error("No email in Apple token");
+    // Upsert user
+    let result = await pool.query("SELECT id, email FROM users WHERE email = $1", [email]);
+    let user;
+    if (result.rows.length > 0) {
+      user = result.rows[0];
+    } else {
+      const randomHash = await bcrypt.hash(crypto.randomUUID(), 10);
+      result = await pool.query(
+        "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email",
+        [email, randomHash]
+      );
+      user = result.rows[0];
+      const configDefaults = [
+        ["display_name", '"User"'], ["app_title", '"My Dashboard"'], ["pin_hash", '""'],
+        ["location", '{"city":"Hoboken, NJ","lat":40.744,"lon":-74.032,"address":"Hoboken, NJ"}'],
+        ["visible_sections", '["weather","strava","path","ferry","bus","news","calendar","stocks","sports","events","restaurants"]'],
+        ["stock_watchlist", "null"],
+      ];
+      for (const [key, val] of configDefaults) {
+        await pool.query(
+          `INSERT INTO user_config (key, value, user_id) VALUES ($1, $2::jsonb, $3) ON CONFLICT (key, user_id) WHERE user_id IS NOT NULL DO NOTHING`,
+          [key, val, user.id]
+        );
+      }
+    }
+    const jwtToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ token: jwtToken, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error("Apple sign-in failed:", e.message);
+    res.status(401).json({ error: e.message || "Apple sign-in failed" });
   }
 });
 

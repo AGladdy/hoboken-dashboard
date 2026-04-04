@@ -1108,7 +1108,14 @@ export default function Dashboard() {
                                   {[r.category, r.price > 0 ? "$".repeat(r.price) : null, r.address?.split(",")[0]].filter(Boolean).join(" · ")}
                                 </Text>
                               </Box>
-                              {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
+                              <Group gap={6} style={{ flexShrink: 0 }} wrap="nowrap">
+                                {r.rating && <Text size="xs" c="orange" fw={700}>★ {r.rating.toFixed(1)}</Text>}
+                                {r.address && (
+                                  <Anchor href={`https://maps.apple.com/?q=${encodeURIComponent(r.name + ' ' + r.address)}`} target="_blank" title="Open in Apple Maps" style={{ display: "flex", alignItems: "center", color: "var(--mantine-color-dimmed)" }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                                  </Anchor>
+                                )}
+                              </Group>
                             </Group>
                           ))}
                         </Box>

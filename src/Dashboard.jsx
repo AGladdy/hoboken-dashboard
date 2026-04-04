@@ -880,12 +880,12 @@ export default function Dashboard() {
                 <SectionHeader badge="News" badgeColor="blue" title="Top Headlines" dragHandle={dh}
                   right={<SegmentedControl size="xs" value={newsCategory} onChange={setNewsCategory} data={["All", "World", "Business", "Tech", "NYC"]} />}
                 />
-                <SectionCard mb="md">
+                <Box mb="md">
                   {(() => {
                     const filtered = newsCategory === "All" ? news : news.filter(n => n.category === newsCategory);
-                    if (filtered.length === 0) return <Text size="sm" c="dimmed" p="sm">Loading...</Text>;
+                    if (filtered.length === 0) return <Text size="sm" c="dimmed" py="xs">Loading...</Text>;
                     return filtered.slice(0, 15).map((item, i, arr) => (
-                      <Group key={i} p="xs" gap="sm" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                      <Group key={i} py="xs" gap="sm" wrap="nowrap" align="flex-start" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                         <Stack gap={4} style={{ flexShrink: 0, width: 72 }}>
                           <Badge size="xs" variant="light" color="blue" style={{ width: "100%", justifyContent: "center" }}>{item.category || "News"}</Badge>
                           <Badge size="xs" variant="outline" color="gray" style={{ width: "100%", justifyContent: "center" }}>{item.source}</Badge>
@@ -895,7 +895,7 @@ export default function Dashboard() {
                       </Group>
                     ));
                   })()}
-                </SectionCard>
+                </Box>
               </Box>
             );
              case 'strava': return (
@@ -926,9 +926,9 @@ export default function Dashboard() {
                   <>
                     {!strava ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (<>
                       {strava.chartData?.length > 0 && <Box style={{ width: '100%', minWidth: 0 }}><BarChart h={120} mb="sm" data={strava.chartData} dataKey="day" series={[{ name: "mins", color: "orange.5", label: "Duration (min)" }]} tickLine="none" gridAxis="none" withTooltip tooltipAnimationDuration={200} barProps={{ radius: 3 }} tooltipProps={{ content: ({ payload }) => { const d = payload?.[0]?.payload; if (!d) return null; return <Paper withBorder p={6} radius="sm"><Text size="xs" fw={600}>{d.day}</Text><Text size="xs">{d.mins ? `${d.mins} min` : "Rest"}</Text>{d.cal ? <Text size="xs" c="orange">{d.cal} cal</Text> : null}</Paper>; } }} /></Box>}
-                      <SectionCard mb="md">
+                      <Box mb="md">
                         {strava.activities.slice(stravaPage * STRAVA_PAGE_SIZE, (stravaPage + 1) * STRAVA_PAGE_SIZE).map((a, i, arr) => (
-                          <Group key={a.id} p="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                          <Group key={a.id} py="xs" justify="space-between" wrap="nowrap" style={{ borderBottom: i < arr.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                             <Group gap="xs" wrap="nowrap">
                               <Text size="md">{a.emoji}</Text>
                               <Box><Text size="xs" fw={500} truncate style={{ maxWidth: 160 }}>{a.name}</Text><Text size="xs" c="dimmed">{new Date(a.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</Text></Box>
@@ -941,7 +941,7 @@ export default function Dashboard() {
                             </Group>
                           </Group>
                         ))}
-                      </SectionCard>
+                      </Box>
                     </>)}
                   </>
                 )}
@@ -1005,14 +1005,14 @@ export default function Dashboard() {
                 {!sportsGroups ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
                   <Box mb="md">
                     {sports[sportsLeague]?.news?.length > 0 && (
-                      <SectionCard mb="md">
+                      <Box mb="md">
                         {sports[sportsLeague].news.map((n, i) => (
-                          <Box key={i} p="sm" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                          <Box key={i} py="xs" style={{ borderBottom: i < sports[sportsLeague].news.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                             <Anchor href={n.link} target="_blank" size="sm" c="var(--mantine-color-text)" underline="never" style={{ display: "block", lineHeight: 1.4 }} onMouseEnter={e => e.currentTarget.style.color = "var(--mantine-color-blue-5)"} onMouseLeave={e => e.currentTarget.style.color = "var(--mantine-color-text)"}>{n.headline}</Anchor>
                             {n.date && <Text size="xs" c="dimmed" mt={2}>{new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>}
                           </Box>
                         ))}
-                      </SectionCard>
+                      </Box>
                     )}
                     <SectionCard mb="sm">
                       <Table verticalSpacing={6} horizontalSpacing="sm">
@@ -1035,13 +1035,13 @@ export default function Dashboard() {
                 <SectionHeader badge="Events" badgeColor="violet" title={`${locationLabel} Events`} dragHandle={dh}
                   right={<Group gap="xs"><Text size="xs" c="dimmed">Page {eventPage + 1} / {Math.ceil(events.length / 10) || 1}</Text><ActionIcon size="sm" variant="default" disabled={eventPage === 0} onClick={() => setEventPage(p => p - 1)}>‹</ActionIcon><ActionIcon size="sm" variant="default" disabled={eventPage >= Math.ceil(events.length / 10) - 1} onClick={() => setEventPage(p => p + 1)}>›</ActionIcon></Group>}
                 />
-                <SectionCard mb="md">
-                  {events.length === 0 ? <Text size="sm" c="dimmed" p="sm">Loading...</Text>
+                <Box mb="md">
+                  {events.length === 0 ? <Text size="sm" c="dimmed" py="xs">Loading...</Text>
                     : events.slice(eventPage * 10, eventPage * 10 + 10).map((e, i) => {
                       const dateStr = e.date ? new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
                       const timeStr = e.time ? new Date("1970-01-01T" + e.time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
                       return (
-                        <Group key={i} p="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                        <Group key={i} py="xs" gap="sm" wrap="nowrap" style={{ borderBottom: i < Math.min(10, events.length - eventPage * 10) - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                           {e.image && <img src={e.image} alt="" style={{ width: 52, height: 34, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />}
                           <Box style={{ flex: 1, minWidth: 0 }}><Text size="xs" fw={500} truncate>{e.name}</Text><Text size="xs" c="dimmed" truncate>{e.venue}{e.genre && e.genre !== "Undefined" ? ` · ${e.genre}` : ""}</Text></Box>
                           <Stack gap={0} align="flex-end" style={{ flexShrink: 0 }}><Text size="xs" c="dimmed">{dateStr}</Text><Text size="xs" c="dimmed">{timeStr}</Text>{e.priceMin && <Text size="xs" c="green">from ${Math.round(e.priceMin)}</Text>}</Stack>
@@ -1049,7 +1049,7 @@ export default function Dashboard() {
                         </Group>
                       );
                     })}
-                </SectionCard>
+                </Box>
               </Box>
             );
             case 'restaurants': return (
@@ -1079,9 +1079,9 @@ export default function Dashboard() {
                       />
                       {restaurantPick && <Text size="xs" c="dimmed" mb="xs" fs="italic">{restaurantPick}</Text>}
                       {restaurants.length === 0 ? <Text size="sm" c="dimmed" mb="md">Loading...</Text> : (
-                        <SectionCard mb="md">
+                        <Box mb="md">
                           {paged.map((r, i) => (
-                            <Group key={i} p="xs" gap="sm" wrap="nowrap" align="center" style={{ borderBottom: i < paged.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                            <Group key={i} py="xs" gap="sm" wrap="nowrap" align="center" style={{ borderBottom: i < paged.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
                               {r.photo
                                 ? <img src={r.photo} alt={r.name} style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
                                 : <Box style={{ width: 40, height: 40, borderRadius: 6, background: "var(--mantine-color-default-hover)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Text>🍽️</Text></Box>
@@ -1097,7 +1097,7 @@ export default function Dashboard() {
                               {r.rating && <Text size="xs" c="orange" fw={700} style={{ flexShrink: 0 }}>★ {r.rating.toFixed(1)}</Text>}
                             </Group>
                           ))}
-                        </SectionCard>
+                        </Box>
                       )}
                     </>
                   );

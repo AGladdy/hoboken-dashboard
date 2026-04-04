@@ -137,7 +137,7 @@ function WeekView({ weekStart, events, onEventClick, onSlotClick }) {
   return (
     <Box style={{ overflowY: 'auto', maxHeight: 520, border: '1px solid var(--mantine-color-default-border)', borderRadius: 8 }}>
       {/* Day headers */}
-      <Box style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, 1fr)', position: 'sticky', top: 0, zIndex: 1, background: 'var(--mantine-color-body)' }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, minmax(0, 1fr))', position: 'sticky', top: 0, zIndex: 1, background: 'var(--mantine-color-body)' }}>
         <Box style={{ borderRight: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)' }} />
         {days.map((d, i) => (
           <Box key={i} style={{ padding: '6px 4px', textAlign: 'center', borderRight: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
@@ -156,7 +156,7 @@ function WeekView({ weekStart, events, onEventClick, onSlotClick }) {
       </Box>
 
       {/* All-day strip */}
-      <Box style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, 1fr)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, minmax(0, 1fr))', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
         <Box style={{ padding: '4px 2px', fontSize: 9, color: 'var(--mantine-color-dimmed)', textAlign: 'right', borderRight: '1px solid var(--mantine-color-default-border)' }}>all-day</Box>
         {days.map((d, i) => (
           <Box key={i} style={{ minHeight: 24, padding: 2, borderRight: '1px solid var(--mantine-color-default-border)' }}>
@@ -169,7 +169,7 @@ function WeekView({ weekStart, events, onEventClick, onSlotClick }) {
 
       {/* Time slots */}
       {hours.map(h => (
-        <Box key={h} style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, 1fr)' }}>
+        <Box key={h} style={{ display: 'grid', gridTemplateColumns: '48px repeat(7, minmax(0, 1fr))' }}>
           <Box style={{
             fontSize: 10, color: 'var(--mantine-color-dimmed)', padding: '0 6px',
             height: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
@@ -186,7 +186,7 @@ function WeekView({ weekStart, events, onEventClick, onSlotClick }) {
             });
             return (
               <Box key={i} onClick={() => onSlotClick(d, h)}
-                style={{ height: 60, borderRight: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)', padding: 2, cursor: 'pointer', position: 'relative' }}>
+                style={{ height: 60, borderRight: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)', padding: 2, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
                 {slotEvents.map(e => (
                   <EventPill key={e.id} event={e} onClick={ev => { ev.stopPropagation(); onEventClick(e); }} />
                 ))}

@@ -107,7 +107,7 @@ function DayCell({ day, events, onClick, onEventClick }) {
         borderRight: '1px solid var(--mantine-color-default-border)',
         borderBottom: '1px solid var(--mantine-color-default-border)',
         background: day.isCurrentMonth ? 'transparent' : 'var(--mantine-color-default-hover)',
-        cursor: 'pointer',
+        cursor: 'pointer', overflow: 'hidden',
       }}
     >
       <Box style={{
@@ -457,9 +457,9 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
           {fetching && <Loader size={12} />}
         </Group>
         <Group gap="xs" wrap="nowrap">
-          <ActionIcon size="sm" variant="default" onClick={goBack}>‹</ActionIcon>
-          <Button size="xs" variant="default" onClick={goToday}>Today</Button>
-          <ActionIcon size="sm" variant="default" onClick={goForward}>›</ActionIcon>
+          <ActionIcon size="sm" variant="subtle" color="gray" onClick={goBack}>‹</ActionIcon>
+          <Button size="xs" variant="subtle" color="gray" onClick={goToday}>Today</Button>
+          <ActionIcon size="sm" variant="subtle" color="gray" onClick={goForward}>›</ActionIcon>
           <SegmentedControl size="xs" value={view} onChange={setView}
             data={[{ value: 'month', label: 'Month' }, { value: 'week', label: 'Week' }]} />
           <Button size="xs" color="blue" onClick={() => openCreate(new Date())}>+ Add</Button>
@@ -485,7 +485,7 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
       ) : view === 'month' ? (
         <Box mb="md">
           {/* DOW headers */}
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderLeft: '1px solid var(--mantine-color-default-border)', borderTop: '1px solid var(--mantine-color-default-border)', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderLeft: '1px solid var(--mantine-color-default-border)', borderTop: '1px solid var(--mantine-color-default-border)', borderRadius: '8px 8px 0 0', overflow: 'hidden' }}>
             {DOW.map(d => (
               <Box key={d} style={{ padding: '6px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, background: 'var(--mantine-color-default-hover)', borderRight: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)' }}>
                 {d}
@@ -493,7 +493,7 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
             ))}
           </Box>
           {/* Day grid */}
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderLeft: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
+          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', borderLeft: '1px solid var(--mantine-color-default-border)', borderBottom: '1px solid var(--mantine-color-default-border)', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
             {monthGrid.map((day, i) => (
               <DayCell
                 key={i}

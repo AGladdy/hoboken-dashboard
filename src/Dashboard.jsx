@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PinInput } from "@mantine/core";
-import { DndContext, closestCenter } from "@dnd-kit/core";
+import { DndContext, closestCenter, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useConfig, API_BASE, fetchWithAuth } from "./ConfigContext";
 import SettingsModal from "./SettingsModal";
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
 import ReactMarkdown from "react-markdown";
@@ -198,7 +198,12 @@ function SortableSection({ id, children }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
   const dragHandleProps = { ref: setActivatorNodeRef, ...attributes, ...listeners };
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, position: "relative", zIndex: isDragging ? 10 : undefined }}>
+    <div ref={setNodeRef} style={{
+      transform: CSS.Transform.toString(transform),
+      transition: transition ?? 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
+      opacity: isDragging ? 0 : 1,
+      position: "relative",
+    }}>
       {children(dragHandleProps)}
     </div>
   );
@@ -1111,7 +1116,15 @@ export default function Dashboard() {
           }
         };
 
+        const [activeId, setActiveId] = useState(null);
+        const sensors = useSensors(
+          useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+          useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+        );
+
+        const handleDragStart = ({ active }) => setActiveId(active.id);
         const handleDragEnd = ({ active, over }) => {
+          setActiveId(null);
           if (!over || active.id === over.id) return;
           const inLeft = leftOrder.includes(active.id);
           const overLeft = leftOrder.includes(over.id);
@@ -1119,17 +1132,13 @@ export default function Dashboard() {
           const overRight = rightOrder.includes(over.id);
 
           if (inLeft && overLeft) {
-            // reorder within left
             setLeftOrder(prev => { const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id)); localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
           } else if (inRight && overRight) {
-            // reorder within right
             setRightOrder(prev => { const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id)); localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
           } else if (inLeft && overRight) {
-            // move from left to right
             setLeftOrder(prev => { const next = prev.filter(id => id !== active.id); localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
             setRightOrder(prev => { const idx = prev.indexOf(over.id); const next = [...prev.slice(0, idx), active.id, ...prev.slice(idx)]; localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
           } else if (inRight && overLeft) {
-            // move from right to left
             setRightOrder(prev => { const next = prev.filter(id => id !== active.id); localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; });
             setLeftOrder(prev => { const idx = prev.indexOf(over.id); const next = [...prev.slice(0, idx), active.id, ...prev.slice(idx)]; localStorage.setItem('gl_left_order', JSON.stringify(next)); return next; });
           }
@@ -1145,7 +1154,7 @@ export default function Dashboard() {
             transition: "transform 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), border-radius 0.5s cubic-bezier(0.34, 1.3, 0.64, 1), margin-bottom 0.5s cubic-bezier(0.34, 1.3, 0.64, 1)",
             willChange: "transform",
           }}>
-          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveId(null)}>
             <Grid gutter="lg">
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <SortableContext items={leftOrder} strategy={verticalListSortingStrategy}>
@@ -1166,6 +1175,13 @@ export default function Dashboard() {
                 </SortableContext>
               </Grid.Col>
             </Grid>
+            <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' }}>
+              {activeId ? (
+                <Box style={{ opacity: 0.92, boxShadow: '0 8px 32px rgba(0,0,0,0.32)', borderRadius: 8, background: 'var(--mantine-color-body)', padding: '0 0 8px' }}>
+                  {renderSection(activeId, null)}
+                </Box>
+              ) : null}
+            </DragOverlay>
           </DndContext>
           </Box>
         );

@@ -278,6 +278,8 @@ export default function Dashboard() {
   const [strava, setStrava] = useState(null);
   const [stravaConnected, setStravaConnected] = useState(true);
   const [newsCategory, setNewsCategory] = useState("All");
+  const [busAdvisories, setBusAdvisories] = useState([]);
+  const [busLive, setBusLive] = useState(null);
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
   const [askHistory, setAskHistory] = useState([]);
@@ -496,6 +498,25 @@ export default function Dashboard() {
     } catch (e) { console.error("Strava fetch failed:", e); }
   }, []);
 
+  const fetchBusLive = useCallback(async () => {
+    if (configLines) return; // only for default route 126
+    try {
+      const res = await fetch(`${API_BASE}/api/bus-live?route=126`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.outbound) setBusLive(data);
+    } catch (e) { /* silent fallback to static schedule */ }
+  }, [configLines]);
+
+  const fetchBusAdvisories = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/bus-advisories?routes=126`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.advisories) setBusAdvisories(data.advisories);
+    } catch (e) { /* silent */ }
+  }, []);
+
   const fetchCalendar = useCallback(async () => {
     try {
       const res = await fetchWithAuth(`${API_BASE}/api/calendar`);
@@ -517,20 +538,26 @@ export default function Dashboard() {
     fetchWeather(); fetchStocks(); fetchRestaurants();
     fetchEvents(); fetchNews(); fetchSports();
     fetchWeatherNarrative(); fetchSportsRecap();
-    fetchStrava(); fetchRestaurantPick(); fetchCalendar();
+    fetchStrava(); fetchRestaurantPick(); fetchCalendar(); fetchBusLive(); fetchBusAdvisories();
     const iv = setInterval(() => {
       fetchWeather(); fetchStocks(); fetchSports();
-      fetchWeatherNarrative(); fetchSportsRecap(); fetchStrava();
+      fetchWeatherNarrative(); fetchSportsRecap(); fetchStrava(); fetchBusLive();
       setRefreshCount(c => c + 1);
     }, CONFIG.REFRESH_INTERVAL);
     return () => clearInterval(iv);
-  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick, fetchCalendar]);
+  }, [fetchWeather, fetchStocks, fetchRestaurants, fetchEvents, fetchNews, fetchSports, fetchWeatherNarrative, fetchSportsRecap, fetchStrava, fetchRestaurantPick, fetchCalendar, fetchBusLive, fetchBusAdvisories]);
 
   useEffect(() => {
     stockRangeRef.current = stockRange;
     setStocks([]);
     fetchStocks();
   }, [stockRange, fetchStocks]);
+
+  // Refresh bus live data every 30 seconds
+  useEffect(() => {
+    const iv = setInterval(fetchBusLive, 30000);
+    return () => clearInterval(iv);
+  }, [fetchBusLive]);
 
   const [stravaError, setStravaError] = useState('');
 
@@ -871,9 +898,36 @@ export default function Dashboard() {
             );
             case 'bus': return (
               <Box key="bus">
-                <SectionHeader badge="Bus" badgeColor="orange" title={configLines ? "Bus" : "NJ Transit Bus to 42nd St"} dragHandle={dh} right={<Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>} />
+                <SectionHeader badge="Bus" badgeColor="orange" title={configLines ? "Bus" : "NJ Transit Bus to 42nd St"} dragHandle={dh}
+                  right={busLive && !configLines ? <Badge size="xs" color="green" variant="dot">Live</Badge> : <Text size="xs" c="dimmed">{isWeekend ? "weekend" : "weekday"}</Text>}
+                />
+                {busAdvisories.length > 0 && (
+                  <Box mb="sm">
+                    {busAdvisories.map((a, i) => (
+                      <Group key={i} gap="xs" py={4} wrap="nowrap" style={{ borderBottom: i < busAdvisories.length - 1 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                        <Text size="xs" style={{ flexShrink: 0 }}>⚠️</Text>
+                        <Text size="xs" style={{ flex: 1, minWidth: 0 }}>
+                          <Anchor href={a.link} target="_blank" size="xs" c="orange" underline="hover">{a.description}</Anchor>
+                        </Text>
+                      </Group>
+                    ))}
+                  </Box>
+                )}
                 <Box mb="md">
-                  {busLines.map((route, ri) => {
+                  {!configLines && busLive ? (() => {
+                    const nextOut = busLive.outbound?.[0];
+                    const nextIn = busLive.inbound?.[0];
+                    const outStatus = nextOut?.status || "";
+                    const inStatus = nextIn?.status || "";
+                    const outIsCountdown = outStatus.startsWith("in ");
+                    const inIsCountdown = inStatus.startsWith("in ");
+                    return (<>
+                      <TransitRow color="#f97316" headsign="To Port Authority / 42nd St" subtitle="from Hoboken Terminal · ~22 min ride" isLast={false}
+                        right={nextOut ? <Text fw={700} size={outIsCountdown ? "md" : "sm"} c={outIsCountdown ? "orange" : undefined}>{nextOut.time}{outIsCountdown ? ` · ${outStatus}` : ""}</Text> : null} />
+                      <TransitRow color="#f97316" headsign="To Hoboken Terminal" subtitle={`from Port Authority · ~22 min ride${nextIn?.gate ? ` · Gate ${nextIn.gate}` : ""}`} isLast
+                        right={nextIn ? <Text fw={700} size={inIsCountdown ? "md" : "sm"} c="dimmed">{nextIn.time}{inIsCountdown ? ` · ${inStatus}` : ""}</Text> : null} />
+                    </>);
+                  })() : busLines.map((route, ri) => {
                     const deps = getNextScheduled(route, now, 4);
                     const rets = getNextScheduled(route, now, 4, true);
                     const nextOut = deps[0]; const nextIn = rets[0];

@@ -532,6 +532,105 @@ app.get("/api/path/hoboken", async (req, res) => {
   res.json({ timestamp: new Date().toISOString(), dataFetchedAt: lastFetch, station: "Hoboken", toNY, toNJ, toNJFrom33S });
 });
 
+// ========== NJ TRANSIT BUS LIVE (BUSDV2) ==========
+const NJTRANSIT_USERNAME = process.env.NJTRANSIT_USERNAME;
+const NJTRANSIT_PASSWORD = process.env.NJTRANSIT_PASSWORD;
+const BUSDV2_BASE = "https://pcsdata.njtransit.com/api/BUSDV2";
+
+let njtToken = null;
+let njtTokenTime = 0;
+
+async function getNjtToken() {
+  const now = Date.now();
+  if (njtToken && now - njtTokenTime < 60 * 60 * 1000) return njtToken; // reuse for 1 hour
+  const form = new URLSearchParams({ username: NJTRANSIT_USERNAME, password: NJTRANSIT_PASSWORD });
+  const r = await fetch(`${BUSDV2_BASE}/authenticateUser`, { method: "POST", body: form });
+  const data = await r.json();
+  if (!data.UserToken) throw new Error(data.errorMessage || "Auth failed");
+  njtToken = data.UserToken;
+  njtTokenTime = now;
+  return njtToken;
+}
+
+async function busDV(stop, direction, route) {
+  const token = await getNjtToken();
+  const form = new URLSearchParams({ token, stop, direction, route, IP: "127.0.0.1" });
+  const r = await fetch(`${BUSDV2_BASE}/getBusDV`, { method: "POST", body: form });
+  const data = await r.json();
+  return (data.DVTrip || []).map(t => ({
+    time: t.departuretime,
+    status: t.departurestatus === "EMPTY" ? t.departuretime : t.departurestatus,
+    header: t.header,
+    gate: t.lanegate !== "EMPTY" ? t.lanegate : null,
+  }));
+}
+
+let busLiveCache = {};
+let busLiveCacheTime = {};
+
+app.get("/api/bus-live", async (req, res) => {
+  if (!NJTRANSIT_USERNAME || !NJTRANSIT_PASSWORD) return res.status(503).json({ error: "NJ Transit credentials not configured" });
+  const route = req.query.route || "126";
+  const cacheKey = route;
+  const now = Date.now();
+  if (busLiveCache[cacheKey] && now - (busLiveCacheTime[cacheKey] || 0) < 30000) {
+    return res.json(busLiveCache[cacheKey]);
+  }
+  try {
+    // Route 126: Hoboken Terminal stop 20497 (outbound NY), Port Authority stop 26229 (return HB)
+    // For other routes the stops would need lookup — adding that later
+    const STOP_MAP = {
+      "126": { outStop: "20497", retStop: "26229", outDir: "NY", retDir: "HB" },
+    };
+    const stops = STOP_MAP[route];
+    if (!stops) return res.status(404).json({ error: `Stop map not configured for route ${route}` });
+    const [outbound, inbound] = await Promise.all([
+      busDV(stops.outStop, stops.outDir, route),
+      busDV(stops.retStop, stops.retDir, route),
+    ]);
+    const result = { route, outbound, inbound, fetchedAt: now };
+    busLiveCache[cacheKey] = result;
+    busLiveCacheTime[cacheKey] = now;
+    res.json(result);
+  } catch (e) {
+    console.error("Bus live fetch failed:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ========== BUS ADVISORIES ==========
+let cachedBusAdvisories = null;
+let busAdvisoryCacheTime = 0;
+
+app.get("/api/bus-advisories", async (req, res) => {
+  const routes = req.query.routes ? req.query.routes.split(",").map(r => r.trim()) : [];
+  try {
+    const now = Date.now();
+    if (!cachedBusAdvisories || now - busAdvisoryCacheTime > 15 * 60 * 1000) {
+      const xml = await fetch("https://www.njtransit.com/rss/BusAdvisories_feed.xml").then(r => r.text());
+      const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+      const rawItems = parsed?.rss?.channel?.item || [];
+      cachedBusAdvisories = (Array.isArray(rawItems) ? rawItems : [rawItems]).map(item => {
+        const m = (item.title || "").match(/^BUS\s+(\S+)/i);
+        return {
+          route: m ? m[1] : null,
+          description: item.description || "",
+          link: item.link || "",
+          date: item.pubDate || "",
+        };
+      }).filter(a => a.route);
+      busAdvisoryCacheTime = now;
+    }
+    const filtered = routes.length > 0
+      ? cachedBusAdvisories.filter(a => routes.includes(a.route))
+      : cachedBusAdvisories.slice(0, 20);
+    res.json({ advisories: filtered });
+  } catch (e) {
+    console.error("Bus advisories fetch failed:", e.message);
+    res.json({ advisories: [] });
+  }
+});
+
 const TOP_100 = [
   "AAPL","MSFT","NVDA","AMZN","GOOGL","META","BRK-B","TSLA","AVGO","JPM",
   "LLY","V","UNH","XOM","MA","COST","PG","JNJ","ABBV","WMT",

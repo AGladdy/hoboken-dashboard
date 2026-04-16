@@ -916,36 +916,32 @@ export default function Dashboard() {
                 )}
                 <Box mb="md">
                   {!configLines && busLive ? (() => {
-                    const nextOut = busLive.outbound?.[0];
-                    const nextIn = busLive.inbound?.[0];
-                    const outStatus = nextOut?.status || "";
-                    const inStatus = nextIn?.status || "";
-                    const outIsCountdown = outStatus.startsWith("in ");
-                    const inIsCountdown = inStatus.startsWith("in ");
-                    const renderExpanded = (trips) => (
-                      <Box py="xs" pl="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-                        {trips.map((t, i) => {
-                          const isCountdown = t.status.startsWith("in ");
+                    const addMins = (timeStr, mins) => {
+                      const d = new Date(`1970/01/01 ${timeStr}`);
+                      if (isNaN(d)) return "";
+                      d.setMinutes(d.getMinutes() + mins);
+                      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                    };
+                    const renderDir = (trips, label, subtitle, isLast) => (
+                      <Box mb={isLast ? 0 : "sm"} pb={isLast ? 0 : "sm"} style={{ borderBottom: isLast ? "none" : "1px solid var(--mantine-color-default-border)" }}>
+                        <Text size="xs" c="dimmed" mb={4}>{label} · {subtitle}</Text>
+                        {trips.slice(0, 4).map((t, i) => {
+                          const isCountdown = t.status?.startsWith("in ");
+                          const arrival = addMins(t.time, 25);
                           return (
-                            <Group key={i} justify="space-between" py={2}>
-                              <Text size="xs" c="dimmed">{t.header}{t.gate ? ` · Gate ${t.gate}` : ""}</Text>
-                              <Text size="xs" fw={600} c={isCountdown ? "orange" : undefined}>{t.time}{isCountdown ? ` · ${t.status}` : ""}</Text>
+                            <Group key={i} gap="xs" py={3} style={{ borderTop: i > 0 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
+                              <Text size="sm" fw={i === 0 ? 700 : 400} c={i === 0 && isCountdown ? "orange" : undefined} style={{ width: 72 }}>{t.time}</Text>
+                              <Text size="xs" c={isCountdown ? "orange" : "dimmed"} style={{ width: 60 }}>{isCountdown ? t.status : "—"}</Text>
+                              <Text size="xs" c="dimmed" style={{ flex: 1 }}>arr {arrival}</Text>
+                              {t.gate && <Text size="xs" c="dimmed">Gate {t.gate}</Text>}
                             </Group>
                           );
                         })}
                       </Box>
                     );
                     return (<>
-                      <Box onClick={() => setBusExpanded(p => p === 'out' ? null : 'out')} style={{ cursor: 'pointer' }}>
-                        <TransitRow color="#f97316" headsign="To Port Authority / 42nd St" subtitle="from Washington St & 2nd · ~25 min ride" isLast={busExpanded !== 'out'}
-                          right={nextOut ? <Text fw={700} size={outIsCountdown ? "md" : "sm"} c={outIsCountdown ? "orange" : undefined}>{nextOut.time}{outIsCountdown ? ` · ${outStatus}` : ""}</Text> : null} />
-                      </Box>
-                      {busExpanded === 'out' && renderExpanded(busLive.outbound || [])}
-                      <Box onClick={() => setBusExpanded(p => p === 'in' ? null : 'in')} style={{ cursor: 'pointer' }}>
-                        <TransitRow color="#f97316" headsign="To Washington St & 2nd" subtitle={`from Port Authority · ~25 min ride${nextIn?.gate ? ` · Gate ${nextIn.gate}` : ""}`} isLast={busExpanded !== 'in'}
-                          right={nextIn ? <Text fw={700} size={inIsCountdown ? "md" : "sm"} c="dimmed">{nextIn.time}{inIsCountdown ? ` · ${inStatus}` : ""}</Text> : null} />
-                      </Box>
-                      {busExpanded === 'in' && renderExpanded(busLive.inbound || [])}
+                      {renderDir(busLive.outbound || [], "To Port Authority / 42nd St", "from Washington St & 2nd", false)}
+                      {renderDir(busLive.inbound || [], "To Washington St & 2nd", "from Port Authority", true)}
                     </>);
                   })() : busLines.map((route, ri) => {
                     const deps = getNextScheduled(route, now, 4);

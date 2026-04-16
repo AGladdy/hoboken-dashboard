@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
-import { PinInput } from "@mantine/core";
 import { DndContext, closestCenter, DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useConfig, API_BASE, fetchWithAuth } from "./ConfigContext";
 import SettingsModal from "./SettingsModal";
@@ -12,7 +11,7 @@ import "@mantine/charts/styles.css";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
   Button, Anchor, Table, Divider, SegmentedControl, ActionIcon,
-  TextInput,
+  TextInput, PinInput,
   useMantineColorScheme, useComputedColorScheme,
 } from "@mantine/core";
 
@@ -499,6 +498,8 @@ export default function Dashboard() {
     } catch (e) { console.error("Strava fetch failed:", e); }
   }, []);
 
+  const configLines = config.transit_lines && config.transit_lines.length > 0 ? config.transit_lines : null;
+
   const fetchBusLive = useCallback(async () => {
     if (configLines) return; // only for default route 126
     try {
@@ -581,7 +582,6 @@ export default function Dashboard() {
   const estTrains = getEstimatedPathTrains(now, 6);
 
   // Use config transit lines if set, otherwise fall back to built-in defaults
-  const configLines = config.transit_lines && config.transit_lines.length > 0 ? config.transit_lines : null;
   const ferryLines = configLines
     ? configLines.filter(l => l.type === 'ferry')
     : [FERRY_SCHEDULES.midtownNJT, FERRY_SCHEDULES.downtown];

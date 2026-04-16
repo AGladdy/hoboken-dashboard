@@ -280,6 +280,7 @@ export default function Dashboard() {
   const [newsCategory, setNewsCategory] = useState("All");
   const [busAdvisories, setBusAdvisories] = useState([]);
   const [busLive, setBusLive] = useState(null);
+  const [busExpanded, setBusExpanded] = useState(null); // 'out' | 'in' | null
   const [askQuery, setAskQuery] = useState("");
   const [askAnswer, setAskAnswer] = useState(null);
   const [askHistory, setAskHistory] = useState([]);
@@ -921,11 +922,30 @@ export default function Dashboard() {
                     const inStatus = nextIn?.status || "";
                     const outIsCountdown = outStatus.startsWith("in ");
                     const inIsCountdown = inStatus.startsWith("in ");
+                    const renderExpanded = (trips) => (
+                      <Box py="xs" pl="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+                        {trips.map((t, i) => {
+                          const isCountdown = t.status.startsWith("in ");
+                          return (
+                            <Group key={i} justify="space-between" py={2}>
+                              <Text size="xs" c="dimmed">{t.header}{t.gate ? ` · Gate ${t.gate}` : ""}</Text>
+                              <Text size="xs" fw={600} c={isCountdown ? "orange" : undefined}>{t.time}{isCountdown ? ` · ${t.status}` : ""}</Text>
+                            </Group>
+                          );
+                        })}
+                      </Box>
+                    );
                     return (<>
-                      <TransitRow color="#f97316" headsign="To Port Authority / 42nd St" subtitle="from Hoboken Terminal · ~22 min ride" isLast={false}
-                        right={nextOut ? <Text fw={700} size={outIsCountdown ? "md" : "sm"} c={outIsCountdown ? "orange" : undefined}>{nextOut.time}{outIsCountdown ? ` · ${outStatus}` : ""}</Text> : null} />
-                      <TransitRow color="#f97316" headsign="To Hoboken Terminal" subtitle={`from Port Authority · ~22 min ride${nextIn?.gate ? ` · Gate ${nextIn.gate}` : ""}`} isLast
-                        right={nextIn ? <Text fw={700} size={inIsCountdown ? "md" : "sm"} c="dimmed">{nextIn.time}{inIsCountdown ? ` · ${inStatus}` : ""}</Text> : null} />
+                      <Box onClick={() => setBusExpanded(p => p === 'out' ? null : 'out')} style={{ cursor: 'pointer' }}>
+                        <TransitRow color="#f97316" headsign="To Port Authority / 42nd St" subtitle="from Washington St & 2nd · ~25 min ride" isLast={busExpanded !== 'out'}
+                          right={nextOut ? <Text fw={700} size={outIsCountdown ? "md" : "sm"} c={outIsCountdown ? "orange" : undefined}>{nextOut.time}{outIsCountdown ? ` · ${outStatus}` : ""}</Text> : null} />
+                      </Box>
+                      {busExpanded === 'out' && renderExpanded(busLive.outbound || [])}
+                      <Box onClick={() => setBusExpanded(p => p === 'in' ? null : 'in')} style={{ cursor: 'pointer' }}>
+                        <TransitRow color="#f97316" headsign="To Washington St & 2nd" subtitle={`from Port Authority · ~25 min ride${nextIn?.gate ? ` · Gate ${nextIn.gate}` : ""}`} isLast={busExpanded !== 'in'}
+                          right={nextIn ? <Text fw={700} size={inIsCountdown ? "md" : "sm"} c="dimmed">{nextIn.time}{inIsCountdown ? ` · ${inStatus}` : ""}</Text> : null} />
+                      </Box>
+                      {busExpanded === 'in' && renderExpanded(busLive.inbound || [])}
                     </>);
                   })() : busLines.map((route, ri) => {
                     const deps = getNextScheduled(route, now, 4);

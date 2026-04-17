@@ -948,9 +948,12 @@ export default function Dashboard() {
                         }
                       </Box>
                     );
+                    const outbound = busLive.outbound || [];
+                    const inbound = busLive.inbound || [];
                     return (<>
-                      {renderDir(busLive.outbound || [], "To Port Authority / 42nd St", "Washington St & 3rd", "42nd St", 25, false)}
-                      {renderDir(busLive.inbound || [], "To Washington St & 3rd", "Port Authority", "Washington St & 3rd", 25, true)}
+                      {outbound.length > 0 && renderDir(outbound, "To Port Authority / 42nd St", "Washington St & 3rd", "42nd St", 25, inbound.length === 0)}
+                      {inbound.length > 0 && renderDir(inbound, "To Washington St & 2nd", "Port Authority", "Washington St & 2nd", 25, true)}
+                      {outbound.length === 0 && inbound.length === 0 && <Text size="sm" c="dimmed" py="xs">No upcoming trips</Text>}
                     </>);
                   })() : busLines.map((route, ri) => {
                     const deps = getNextScheduled(route, now, 4);

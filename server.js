@@ -582,21 +582,25 @@ app.get("/api/bus-live", async (req, res) => {
     // the API returns all buses at the stop, so we filter by header keyword.
     // Port Authority (26229) used for return gate info since it shows lane assignments.
     const STOP_MAP = {
-      // stop: Washington St & 3rd (boards to NY), retGateStop: Port Authority (gate info for return)
-      "126": { stop: "20520", retGateStop: "26229" },
+      // outStop: Hoboken Terminal (departs to NY), inStop: Washington St & 2nd (drops off from NY), retGateStop: Port Authority (gate info)
+      // 20509 = Washington St & 3rd (outbound to NY), 20520 = Washington St & 2nd (inbound to Hoboken)
+      // 26229 = Port Authority (gate info for inbound)
+      "126": { outStop: "20509", inStop: "20520", retGateStop: "26229" },
     };
     const stops = STOP_MAP[route];
     if (!stops) return res.status(404).json({ error: `Stop map not configured for route ${route}` });
     const [outboundRaw, inboundRaw, retGate] = await Promise.all([
-      busDV(stops.stop, "NY", route),
-      busDV(stops.stop, "HB", route),
+      busDV(stops.outStop, "NY", route),
+      busDV(stops.inStop, "HB", route),
       busDV(stops.retGateStop, "HB", route),
     ]);
-    const outbound = outboundRaw;
-    const inbound = inboundRaw.map(t => {
-      const match = retGate.find(g => g.time === t.time);
-      return { ...t, gate: match?.gate || t.gate };
-    });
+    const outbound = outboundRaw.filter(t => /new york/i.test(t.header));
+    const inbound = inboundRaw
+      .filter(t => /hoboken|path/i.test(t.header))
+      .map(t => {
+        const match = retGate.find(g => g.time === t.time);
+        return { ...t, gate: match?.gate || t.gate };
+      });
     const result = { route, outbound, inbound, fetchedAt: now };
     busLiveCache[cacheKey] = result;
     busLiveCacheTime[cacheKey] = now;

@@ -922,26 +922,35 @@ export default function Dashboard() {
                       d.setMinutes(d.getMinutes() + mins);
                       return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
                     };
-                    const renderDir = (trips, label, subtitle, isLast) => (
-                      <Box mb={isLast ? 0 : "sm"} pb={isLast ? 0 : "sm"} style={{ borderBottom: isLast ? "none" : "1px solid var(--mantine-color-default-border)" }}>
-                        <Text size="xs" c="dimmed" mb={4}>{label} · {subtitle}</Text>
-                        {trips.slice(0, 4).map((t, i) => {
-                          const isCountdown = t.status?.startsWith("in ");
-                          const arrival = addMins(t.time, 25);
-                          return (
-                            <Group key={i} gap="xs" py={3} style={{ borderTop: i > 0 ? "1px solid var(--mantine-color-default-border)" : "none" }}>
-                              <Text size="sm" fw={i === 0 ? 700 : 400} c={i === 0 && isCountdown ? "orange" : undefined} style={{ width: 72 }}>{t.time}</Text>
-                              <Text size="xs" c={isCountdown ? "orange" : "dimmed"} style={{ width: 60 }}>{isCountdown ? t.status : "—"}</Text>
-                              <Text size="xs" c="dimmed" style={{ flex: 1 }}>arr {arrival}</Text>
-                              {t.gate && <Text size="xs" c="dimmed">Gate {t.gate}</Text>}
-                            </Group>
-                          );
-                        })}
+                    const renderDir = (trips, label, from, to, tripMins, isLast) => (
+                      <Box mb={isLast ? 0 : "md"} pb={isLast ? 0 : "md"} style={{ borderBottom: isLast ? "none" : "1px solid var(--mantine-color-default-border)" }}>
+                        <Group gap={6} mb={6} align="center">
+                          <Box style={{ width: 3, height: 32, borderRadius: 2, background: "#f97316", flexShrink: 0 }} />
+                          <Stack gap={1}>
+                            <Text size="sm" fw={600} lh={1.2}>{label}</Text>
+                            <Text size="xs" c="dimmed" lh={1.2}>{from} → {to} · ~{tripMins} min ride</Text>
+                          </Stack>
+                        </Group>
+                        {trips.length === 0
+                          ? <Text size="xs" c="dimmed" py={4} pl={9}>No upcoming trips</Text>
+                          : trips.map((t, i) => {
+                              const isCountdown = t.status?.startsWith("in ");
+                              const arrival = addMins(t.time, tripMins);
+                              return (
+                                <Group key={i} gap={0} py={5} pl={9} style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
+                                  <Text size="sm" fw={i === 0 ? 700 : 400} c={isCountdown ? "orange" : undefined} style={{ width: 80 }}>{t.time}</Text>
+                                  <Text size="xs" fw={isCountdown ? 600 : 400} c={isCountdown ? "orange" : "dimmed"} style={{ width: 72 }}>{isCountdown ? t.status : "on time"}</Text>
+                                  <Text size="xs" c="dimmed" style={{ flex: 1 }}>arr {arrival}</Text>
+                                  {t.gate && <Badge size="xs" variant="outline" color="gray">Gate {t.gate}</Badge>}
+                                </Group>
+                              );
+                            })
+                        }
                       </Box>
                     );
                     return (<>
-                      {renderDir(busLive.outbound || [], "To Port Authority / 42nd St", "from Washington St & 2nd", false)}
-                      {renderDir(busLive.inbound || [], "To Washington St & 2nd", "from Port Authority", true)}
+                      {renderDir(busLive.outbound || [], "To Port Authority / 42nd St", "Washington St & 3rd", "42nd St", 25, false)}
+                      {renderDir(busLive.inbound || [], "To Washington St & 3rd", "Port Authority", "Washington St & 3rd", 25, true)}
                     </>);
                   })() : busLines.map((route, ri) => {
                     const deps = getNextScheduled(route, now, 4);

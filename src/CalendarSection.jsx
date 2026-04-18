@@ -424,18 +424,14 @@ export default function CalendarSection({ dh, events, connected, onEventsChange 
     if (data.needsReconnect) { setNeedsReconnect(true); return; }
     if (data.error) { console.error('Save event error:', data.error); return; }
     if (!data.event) return;
-    if (existingEvent) {
-      onEventsChange(prev => prev.map(e => e.id === data.event.id ? data.event : e));
-    } else {
-      onEventsChange(prev => [...prev, data.event]);
-    }
     setModalOpen(false);
+    fetchEvents();
   };
 
   const handleDelete = async (event) => {
     await fetchWithAuth(`${API_BASE}/api/calendar/events/${event.id}?calendarId=${event.calendarId}`, { method: 'DELETE' });
-    onEventsChange(prev => prev.filter(e => e.id !== event.id));
     setModalOpen(false);
+    fetchEvents();
   };
 
   const monthGrid = buildMonthGrid(cursor);

@@ -18,7 +18,7 @@ app.use(express.json());
 
 // ========== POSTGRES ==========
 const pool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 5000, query_timeout: 5000 })
   : null;
 
 async function initDb() {

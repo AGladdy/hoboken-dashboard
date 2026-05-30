@@ -72,6 +72,7 @@ const ALL_SECTIONS = [
   { id: 'sports',      label: 'Sports' },
   { id: 'events',      label: 'Events' },
   { id: 'restaurants', label: 'Restaurants' },
+  { id: 'cleaning',    label: 'Cleaning Schedule' },
 ];
 
 export default function SettingsModal({ opened, onClose }) {

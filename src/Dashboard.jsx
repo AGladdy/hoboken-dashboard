@@ -7,6 +7,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { BarChart } from "@mantine/charts";
 import ReactMarkdown from "react-markdown";
 import CalendarSection from "./CalendarSection";
+import CleaningSection from "./CleaningSection";
 import "@mantine/charts/styles.css";
 import {
   Box, Grid, SimpleGrid, Card, Paper, Group, Stack, Text, Badge,
@@ -292,7 +293,7 @@ export default function Dashboard() {
   const chatBottomRef = useRef(null);
 
   const DEFAULT_LEFT = ['weather', 'strava', 'path', 'ferry', 'bus', 'news'];
-  const DEFAULT_RIGHT = ['calendar', 'stocks', 'sports', 'events', 'restaurants'];
+  const DEFAULT_RIGHT = ['calendar', 'stocks', 'sports', 'events', 'restaurants', 'cleaning'];
   const [leftOrder, setLeftOrder] = useState(() => { try { return JSON.parse(localStorage.getItem('gl_left_order')) || DEFAULT_LEFT; } catch { return DEFAULT_LEFT; } });
   const [rightOrder, setRightOrder] = useState(() => {
     try {
@@ -300,6 +301,7 @@ export default function Dashboard() {
       if (!saved) return DEFAULT_RIGHT;
       // Ensure 'calendar' is present for users with old saved layouts
       if (!saved.includes('calendar')) { const next = ['calendar', ...saved]; localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; }
+      if (!saved.includes('cleaning')) { const next = [...saved, 'cleaning']; localStorage.setItem('gl_right_order', JSON.stringify(next)); return next; }
       return saved;
     } catch { return DEFAULT_RIGHT; }
   });
@@ -320,6 +322,14 @@ export default function Dashboard() {
     const iv = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(iv);
   }, []);
+
+  // Auto-add 'cleaning' to visible_sections for existing users
+  useEffect(() => {
+    const vs = config.visible_sections;
+    if (vs && !vs.includes('cleaning')) {
+      saveConfig({ visible_sections: [...vs, 'cleaning'] });
+    }
+  }, [config.visible_sections, saveConfig]);
 
   const fetchPath = useCallback(async () => {
     try {
@@ -1209,6 +1219,9 @@ export default function Dashboard() {
             );
             case 'calendar': return (
               <CalendarSection key="calendar" dh={dh} events={calendarEvents} connected={calendarConnected} onEventsChange={setCalendarEvents} />
+            );
+            case 'cleaning': return (
+              <CleaningSection key="cleaning" dh={dh} />
             );
             default: return null;
           }

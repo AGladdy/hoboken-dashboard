@@ -6,7 +6,7 @@ export const DEFAULT_CONFIG = {
   display_name: 'User',
   app_title: 'My Dashboard',
   location: { city: 'Hoboken, NJ', lat: 40.744, lon: -74.032, address: 'Hoboken, NJ' },
-  visible_sections: ['weather','strava','path','ferry','bus','news','stocks','sports','events','restaurants'],
+  visible_sections: ['weather','strava','path','ferry','bus','news','stocks','sports','events','restaurants','cleaning'],
 };
 
 const ConfigContext = createContext({ config: DEFAULT_CONFIG, loading: true, saveConfig: async () => {} });
